@@ -168,3 +168,6 @@ Cloudflare Pages 로 옮기려면 `deploy.yml` 만 교체하고 `VITE_BASE` 를 
 
 정보는 참고용이며, 거래·입찰 전 원출처(국토교통부, 온비드, 법원) 확인이 필요하다.
 출처: 국토교통부 실거래가 공개시스템(공공데이터포털). 지도 © OpenStreetMap 기여자.
+
+이 저장소의 코드는 **All rights reserved** 다 — 열람용으로만 공개하며,
+사전 허가 없는 복제·수정·배포·상업적 이용을 허용하지 않는다. [LICENSE](LICENSE) 참고.
