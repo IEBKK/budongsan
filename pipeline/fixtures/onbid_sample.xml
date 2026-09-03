@@ -1,46 +1,65 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- 차세대 온비드 부동산 물건목록 조회서비스(getRlstCltrList2) 응답 샘플.
+     실 스펙: apis.data.go.kr/B010003/OnbidRlstListSrvc2 (data.go.kr ID 15157207) -->
 <response>
   <header><resultCode>00</resultCode><resultMsg>NORMAL SERVICE.</resultMsg></header>
   <body>
     <items>
       <item>
-        <PLNM_NO>202601-00001</PLNM_NO><PBCT_NO>202601</PBCT_NO>
-        <CLTR_NO>1001</CLTR_NO><CLTR_HSTR_NO>1</CLTR_HSTR_NO>
-        <BID_MNMT_NO>2026-0100-001001</BID_MNMT_NO>
-        <CLTR_NM>서울 강남구 역삼동 아파트</CLTR_NM>
-        <CTGR_FULL_NM>부동산 / 주거용건물 / 아파트</CTGR_FULL_NM>
-        <LDNM_ADRS>서울특별시 강남구 역삼동 725-10</LDNM_ADRS>
-        <NMRD_ADRS>서울특별시 강남구 테헤란로 152</NMRD_ADRS>
-        <MIN_BID_PRC>612000000</MIN_BID_PRC>
-        <APSL_ASES_AVG_AMT>1200000000</APSL_ASES_AVG_AMT>
-        <FEE_RATE>51</FEE_RATE>
-        <USCBD_CNT>3</USCBD_CNT>
-        <PBCT_BEGN_DTM>20260907100000</PBCT_BEGN_DTM>
-        <PBCT_CLS_DTM>20260909170000</PBCT_CLS_DTM>
-        <PBCT_CLTR_STAT_NM>입찰진행중</PBCT_CLTR_STAT_NM>
-        <DPSL_MTD_NM>매각</DPSL_MTD_NM><BID_MTD_NM>인터넷</BID_MTD_NM>
-        <MANE_INST_NM>한국자산관리공사</MANE_INST_NM>
+        <cltrMngNo>2026-01001-001</cltrMngNo>
+        <pbctCdtnNo>1</pbctCdtnNo>
+        <onbidCltrNm>서울 강남구 역삼동 아파트</onbidCltrNm>
+        <cltrUsgLclsCtgrNm>부동산</cltrUsgLclsCtgrNm>
+        <cltrUsgMclsCtgrNm>주거용건물</cltrUsgMclsCtgrNm>
+        <cltrUsgSclsCtgrNm>아파트</cltrUsgSclsCtgrNm>
+        <lctnSdnm>서울특별시</lctnSdnm>
+        <lctnSggnm>강남구</lctnSggnm>
+        <lctnEmdNm>역삼동</lctnEmdNm>
+        <ltnoPnu>1168010100107250010</ltnoPnu>
+        <lowstBidPrcIndctCont>612000000</lowstBidPrcIndctCont>
+        <apslEvlAmt>1200000000</apslEvlAmt>
+        <feeRate>51</feeRate>
+        <usbdNft>3</usbdNft>
+        <cltrBidBgngDt>202609071000</cltrBidBgngDt>
+        <cltrBidEndDt>202609091700</cltrBidEndDt>
+        <pbctStatNm>입찰진행중</pbctStatNm>
+        <dspsMthodNm>매각</dspsMthodNm>
+        <bidMthodNm>최고가방식</bidMthodNm>
+        <orgNm>한국자산관리공사</orgNm>
+        <prptDivNm>압류재산</prptDivNm>
       </item>
       <item>
-        <PLNM_NO>202601-00002</PLNM_NO>
-        <CLTR_NO>1002</CLTR_NO><CLTR_HSTR_NO>1</CLTR_HSTR_NO>
-        <CLTR_NM>부산 해운대구 토지</CLTR_NM>
-        <CTGR_FULL_NM>부동산 / 토지 / 대지</CTGR_FULL_NM>
-        <LDNM_ADRS>부산광역시 해운대구 우동 1234</LDNM_ADRS>
-        <MIN_BID_PRC>88000000</MIN_BID_PRC>
-        <APSL_ASES_AVG_AMT>110000000</APSL_ASES_AVG_AMT>
-        <USCBD_CNT>1</USCBD_CNT>
-        <PBCT_CLS_DTM>20260915170000</PBCT_CLS_DTM>
-        <PBCT_CLTR_STAT_NM>입찰진행중</PBCT_CLTR_STAT_NM>
-        <DPSL_MTD_NM>매각</DPSL_MTD_NM>
+        <cltrMngNo>2026-01002-001</cltrMngNo>
+        <pbctCdtnNo>1</pbctCdtnNo>
+        <onbidCltrNm>부산 해운대구 토지</onbidCltrNm>
+        <cltrUsgLclsCtgrNm>부동산</cltrUsgLclsCtgrNm>
+        <cltrUsgMclsCtgrNm>토지</cltrUsgMclsCtgrNm>
+        <cltrUsgSclsCtgrNm>대지</cltrUsgSclsCtgrNm>
+        <lctnSdnm>부산광역시</lctnSdnm>
+        <lctnSggnm>해운대구</lctnSggnm>
+        <lctnEmdNm>우동</lctnEmdNm>
+        <ltnoPnu>2635010200112340000</ltnoPnu>
+        <lowstBidPrcIndctCont>88000000</lowstBidPrcIndctCont>
+        <apslEvlAmt>110000000</apslEvlAmt>
+        <usbdNft>1</usbdNft>
+        <cltrBidBgngDt>202609141000</cltrBidBgngDt>
+        <cltrBidEndDt>202609161700</cltrBidEndDt>
+        <pbctStatNm>입찰예정</pbctStatNm>
+        <dspsMthodNm>매각</dspsMthodNm>
+        <bidMthodNm>최고가방식</bidMthodNm>
+        <rqstOrgNm>부산광역시청</rqstOrgNm>
+        <prptDivNm>국유재산</prptDivNm>
       </item>
       <item>
-        <!-- 주소 없음: 좌표를 붙일 수 없으므로 제외되어야 한다 -->
-        <PLNM_NO>202601-00003</PLNM_NO><CLTR_NO>1003</CLTR_NO>
-        <CLTR_NM>기계장비</CLTR_NM>
-        <MIN_BID_PRC>3000000</MIN_BID_PRC>
+        <!-- 소재지 정보가 없는 물건 — 파서가 건너뛰어야 한다 -->
+        <cltrMngNo>2026-01003-001</cltrMngNo>
+        <pbctCdtnNo>1</pbctCdtnNo>
+        <onbidCltrNm>소재지 미상 물건</onbidCltrNm>
+        <lowstBidPrcIndctCont>비공개</lowstBidPrcIndctCont>
       </item>
     </items>
-    <numOfRows>500</numOfRows><pageNo>1</pageNo><totalCount>3</totalCount>
+    <totalCount>3</totalCount>
+    <numOfRows>200</numOfRows>
+    <pageNo>1</pageNo>
   </body>
 </response>

@@ -102,7 +102,8 @@ def test_auction() -> None:
     things = onbid.parse(fixture("onbid_sample.xml"))
     check("[공매] 주소 없는 건 제외", len(things), 2)
     seoul = things[0]
-    check("[공매] 물건키", seoul.key, "202601-00001-1001-1")
+    check("[공매] 물건키", seoul.key, "2026-01001-001-1")
+    check("[공매] PNU -> 지번 복원", seoul.address, "서울특별시 강남구 역삼동 725-10")
     check("[공매] 최저가", seoul.min_bid, 612000000)
     check("[공매] 감정가", seoul.appraisal, 1200000000)
     check("[공매] 최저가율", seoul.bid_rate, 51.0)
