@@ -16,6 +16,10 @@ on:
         description: '수집할 유형 (콤마 구분)'
         required: false
         default: 'apt,commercial,land,auction'
+      refresh_approx:
+        description: '근사 좌표를 정밀 좌표로 재조회 (지오코딩 키 등록 후 1회)'
+        type: boolean
+        default: false
 
 concurrency:
   group: daily-data
@@ -53,7 +57,7 @@ jobs:
           KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
           TARGET_REGIONS: ${{ github.event.inputs.regions }}
           ROLLING_MONTHS: '3'
-        run: python -m pipeline.build --types "${{ github.event.inputs.types || 'apt,commercial,land,auction' }}"
+        run: python -m pipeline.build --types "${{ github.event.inputs.types || 'apt,commercial,land,auction' }}" ${{ inputs.refresh_approx && '--refresh-approx' || '' }}
 
       - name: 산출물 요약
         run: |
