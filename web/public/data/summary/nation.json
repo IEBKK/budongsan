@@ -1,1 +1,1 @@
-{"regions":[]}
+{"regions":[{"code":"11110","sido":"서울특별시","name":"종로구","lat":37.5735,"lng":126.979,"complexCount":29,"dealCount":49,"pricePerPyeong":3886.5,"medianAmount":93900,"momPct":-100.0,"monthly":[{"ym":"202607","count":40,"pricePerPyeong":3821.1},{"ym":"202608","count":9,"pricePerPyeong":5391.3},{"ym":"202609","count":0,"pricePerPyeong":0}]}]}
