@@ -12,16 +12,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with: { python-version: '3.12' }
       - name: 파이프라인 테스트
         run: python -m pipeline.tests.test_transform
       - name: 모의 데이터 생성 (4개 유형 전 구간 검증)
         run: python -m pipeline.build --mock --no-geocode --regions 11680,11650
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '20'
           cache: npm
