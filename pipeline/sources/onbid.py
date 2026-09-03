@@ -121,7 +121,8 @@ def parse(xml_text: str) -> list[AuctionThing]:
         )
 
     code = root.find(".//resultCode")
-    if code is not None and code.text and code.text.strip() not in ("00", "000"):
+    if code is not None and code.text and code.text.strip() not in ("00", "000", "03"):
+        # 03(NODATA_ERROR)은 해당 재산유형×수의계약 조합에 물건이 없다는 뜻 — 정상 빈 응답.
         msg = root.find(".//resultMsg")
         raise OnbidError(
             f"온비드 API 오류 resultCode={code.text.strip()} "

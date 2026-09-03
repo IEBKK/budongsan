@@ -70,7 +70,8 @@ def as_float(value: str) -> float | None:
 
 def check_result_code(root: ET.Element) -> None:
     el = root.find(".//resultCode")
-    if el is not None and el.text and el.text.strip() not in ("00", "000"):
+    # 03(NODATA)은 '해당 조건에 데이터 없음'이라 정상 빈 응답으로 취급한다.
+    if el is not None and el.text and el.text.strip() not in ("00", "000", "03"):
         msg = root.find(".//resultMsg")
         detail = (msg.text or "").strip() if msg is not None and msg.text else ""
         raise MolitError(f"API 오류 resultCode={el.text.strip()} msg={detail}")
