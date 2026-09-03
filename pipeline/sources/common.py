@@ -148,4 +148,10 @@ def get_with_retry(session, endpoint: str, params: dict) -> str:
         except Exception as exc:  # noqa: BLE001 - 네트워크/HTTP 모두 재시도 대상
             last = exc
             time.sleep(1.5 * (attempt + 1))
-    raise MolitError(redact_keys(f"요청 실패 (재시도 {RETRIES}회): {last}"))
+    # HTTP 오류의 상태 코드만으론 원인을 알 수 없다(403 이 키 미반영·미신청·쿼터 초과 전부에 쓰인다).
+    # 게이트웨이가 본문에 넣어 주는 오류 XML 을 함께 남긴다.
+    detail = ""
+    resp = getattr(last, "response", None)
+    if resp is not None and resp.text:
+        detail = " | 응답: " + " ".join(resp.text[:300].split())
+    raise MolitError(redact_keys(f"요청 실패 (재시도 {RETRIES}회): {last}{detail}"))
