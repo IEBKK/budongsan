@@ -1,0 +1,85 @@
+# DATA-01: 매일 KST 06:00 에 데이터 파이프라인을 돌리고 결과를 커밋한다.
+# 커밋이 생기면 deploy.yml 이 이어서 정적 사이트를 재배포한다.
+# DATA-04: 스케줄 워크플로 실패 시 GitHub 이 저장소 소유자에게 이메일을 보낸다.
+name: daily-data
+
+on:
+  schedule:
+    - cron: '0 21 * * *' # 21:00 UTC = 06:00 KST
+  workflow_dispatch:
+    inputs:
+      regions:
+        description: '수집할 시군구 코드 (콤마 구분, 비우면 전체)'
+        required: false
+        default: ''
+      types:
+        description: '수집할 유형 (콤마 구분)'
+        required: false
+        default: 'apt,commercial,land,auction'
+
+concurrency:
+  group: daily-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-data:
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+
+      - run: pip install -r pipeline/requirements.txt
+
+      # 파싱 회귀를 먼저 잡는다 — API 스펙 변경 시 여기서 터진다 (오픈이슈 9-4).
+      - name: 파이프라인 테스트
+        run: python -m pipeline.tests.test_transform
+
+      - name: 실거래가·공매 수집 및 JSON 생성
+        env:
+          MOLIT_SERVICE_KEY: ${{ secrets.MOLIT_SERVICE_KEY }}
+          ONBID_SERVICE_KEY: ${{ secrets.ONBID_SERVICE_KEY }}
+          VWORLD_KEY: ${{ secrets.VWORLD_KEY }}
+          KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+          TARGET_REGIONS: ${{ github.event.inputs.regions }}
+          ROLLING_MONTHS: '3'
+        run: python -m pipeline.build --types "${{ github.event.inputs.types || 'apt,commercial,land,auction' }}"
+
+      - name: 산출물 요약
+        run: |
+          python -c "import json;m=json.load(open('web/public/data/meta.json'));print('기준일',m['dataAsOf'],'/ 지역',m['regionCount'],'/ 거래',m['dealCountByType'],'/ 공매',(m['auction'] or {}).get('count'),'/ 실패',len(m['failedRegions']))"
+          du -sh web/public/data
+
+      - name: 변경분 커밋
+        id: commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add web/public/data pipeline/cache
+          if git diff --staged --quiet; then
+            echo '변경 없음 — 커밋 생략'
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "data: $(TZ=Asia/Seoul date +%Y-%m-%d) 자동 갱신"
+            git push
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: build-data
+    if: needs.build-data.outputs.changed == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml

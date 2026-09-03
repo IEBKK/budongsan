@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<response>
+  <header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header>
+  <body>
+    <items>
+      <item>
+        <aptNm>래미안대치팰리스</aptNm>
+        <buildYear>2015</buildYear>
+        <dealAmount>  350,000</dealAmount>
+        <dealDay>14</dealDay><dealMonth>6</dealMonth><dealYear>2026</dealYear>
+        <excluUseAr>84.98</excluUseAr>
+        <floor>12</floor>
+        <jibun>670</jibun>
+        <roadNm>선릉로</roadNm>
+        <sggCd>11680</sggCd>
+        <umdNm>대치동</umdNm>
+      </item>
+      <item>
+        <aptNm>래미안대치팰리스</aptNm>
+        <buildYear>2015</buildYear>
+        <dealAmount>  262,000</dealAmount>
+        <dealDay>2</dealDay><dealMonth>6</dealMonth><dealYear>2026</dealYear>
+        <excluUseAr>59.98</excluUseAr>
+        <floor>7</floor>
+        <jibun>670</jibun>
+        <roadNm>선릉로</roadNm>
+        <sggCd>11680</sggCd>
+        <umdNm>대치동</umdNm>
+      </item>
+      <item>
+        <!-- 해제된 거래: 제외되어야 한다 -->
+        <aptNm>은마</aptNm>
+        <buildYear>1979</buildYear>
+        <cdealDay>26.06.20</cdealDay>
+        <cdealType>O</cdealType>
+        <dealAmount>  280,000</dealAmount>
+        <dealDay>3</dealDay><dealMonth>6</dealMonth><dealYear>2026</dealYear>
+        <excluUseAr>84.43</excluUseAr>
+        <floor>4</floor>
+        <jibun>316</jibun>
+        <sggCd>11680</sggCd>
+        <umdNm>대치동</umdNm>
+      </item>
+      <item>
+        <!-- 구버전 한글 태그 응답 호환 확인용 -->
+        <아파트>은마</아파트>
+        <건축년도>1979</건축년도>
+        <거래금액>  271,500</거래금액>
+        <일>9</일><월>5</월><년>2026</년>
+        <전용면적>76.79</전용면적>
+        <층>9</층>
+        <지번>316</지번>
+        <지역코드>11680</지역코드>
+        <법정동> 대치동</법정동>
+      </item>
+    </items>
+    <numOfRows>1000</numOfRows><pageNo>1</pageNo><totalCount>4</totalCount>
+  </body>
+</response>

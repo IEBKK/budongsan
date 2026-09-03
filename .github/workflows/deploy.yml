@@ -1,0 +1,59 @@
+# 정적 사이트 배포. 데이터 커밋 또는 코드 변경 시 GitHub Pages 로 올린다.
+# Cloudflare Pages 로 옮길 경우 이 워크플로만 교체하면 된다(대역폭 무제한).
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/deploy.yml'
+  # daily-data 가 데이터 커밋 후 직접 호출한다.
+  # (GITHUB_TOKEN 이 만든 push 는 다른 워크플로를 트리거하지 않기 때문)
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+        working-directory: web
+
+      - run: npm run build
+        working-directory: web
+        env:
+          # Pages 는 https://<user>.github.io/<repo>/ 하위에 배포된다.
+          VITE_BASE: /${{ github.event.repository.name }}/
+          VITE_GA_ID: ${{ vars.GA_MEASUREMENT_ID }}
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

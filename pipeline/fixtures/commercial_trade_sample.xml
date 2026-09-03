@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<response>
+  <header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header>
+  <body>
+    <items>
+      <item>
+        <buildYear>2003</buildYear>
+        <buildingAr>132.45</buildingAr>
+        <buildingType>집합</buildingType>
+        <buildingUse>제1종근린생활시설</buildingUse>
+        <dealAmount>  95,000</dealAmount>
+        <dealDay>11</dealDay><dealMonth>6</dealMonth><dealYear>2026</dealYear>
+        <floor>1</floor>
+        <jibun>825</jibun>
+        <landUse>일반상업지역</landUse>
+        <plottageAr>48.2</plottageAr>
+        <roadNm>테헤란로</roadNm>
+        <sggCd>11680</sggCd>
+        <umdNm>역삼동</umdNm>
+      </item>
+      <item>
+        <!-- 건물명이 비어 오는 흔한 케이스: 용도+지번으로 합성되어야 한다 -->
+        <buildYear>2011</buildYear>
+        <buildingAr>410.9</buildingAr>
+        <buildingType>일반</buildingType>
+        <buildingUse>업무시설</buildingUse>
+        <dealAmount>  620,000</dealAmount>
+        <dealDay>3</dealDay><dealMonth>7</dealMonth><dealYear>2026</dealYear>
+        <floor>5</floor>
+        <jibun>737</jibun>
+        <landUse>일반상업지역</landUse>
+        <sggCd>11680</sggCd>
+        <umdNm>역삼동</umdNm>
+      </item>
+      <item>
+        <!-- 해제 거래: 제외 -->
+        <buildingAr>90.0</buildingAr>
+        <buildingUse>판매시설</buildingUse>
+        <cdealType>O</cdealType>
+        <dealAmount>  50,000</dealAmount>
+        <dealDay>5</dealDay><dealMonth>7</dealMonth><dealYear>2026</dealYear>
+        <jibun>100</jibun>
+        <sggCd>11680</sggCd><umdNm>역삼동</umdNm>
+      </item>
+      <item>
+        <!-- 구버전 한글 태그 -->
+        <건축년도>1998</건축년도>
+        <건물면적>77.3</건물면적>
+        <건물주용도>제2종근린생활시설</건물주용도>
+        <거래금액>  41,500</거래금액>
+        <일>20</일><월>8</월><년>2026</년>
+        <층>2</층>
+        <지번>512</지번>
+        <용도지역>제3종일반주거지역</용도지역>
+        <지역코드>11680</지역코드>
+        <법정동> 역삼동</법정동>
+      </item>
+    </items>
+    <numOfRows>1000</numOfRows><pageNo>1</pageNo><totalCount>4</totalCount>
+  </body>
+</response>

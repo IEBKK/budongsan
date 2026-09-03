@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<response>
+  <header><resultCode>000</resultCode><resultMsg>OK</resultMsg></header>
+  <body>
+    <items>
+      <item>
+        <dealAmount>  180,000</dealAmount>
+        <dealArea>331.4</dealArea>
+        <dealDay>7</dealDay><dealMonth>6</dealMonth><dealYear>2026</dealYear>
+        <jimok>대</jimok>
+        <landUse>제2종일반주거지역</landUse>
+        <sggCd>11680</sggCd>
+        <shareDealingType>지분</shareDealingType>
+        <umdNm>자곡동</umdNm>
+      </item>
+      <item>
+        <dealAmount>  92,000</dealAmount>
+        <dealArea>150.0</dealArea>
+        <dealDay>22</dealDay><dealMonth>7</dealMonth><dealYear>2026</dealYear>
+        <jimok>대</jimok>
+        <landUse>제2종일반주거지역</landUse>
+        <sggCd>11680</sggCd>
+        <umdNm>자곡동</umdNm>
+      </item>
+      <item>
+        <!-- 구버전 한글 태그 + 다른 지목 -->
+        <거래금액>  33,000</거래금액>
+        <거래면적>820.5</거래면적>
+        <일>14</일><월>8</월><년>2026</년>
+        <지목>전</지목>
+        <용도지역>자연녹지지역</용도지역>
+        <지역코드>11680</지역코드>
+        <법정동> 세곡동</법정동>
+      </item>
+    </items>
+    <numOfRows>1000</numOfRows><pageNo>1</pageNo><totalCount>3</totalCount>
+  </body>
+</response>
