@@ -17,6 +17,8 @@ from . import config
 
 CACHE_PATH = config.CACHE_DIR / "geocode.json"
 APPROX_RADIUS_M = 900  # 시군구 중심 주변 분산 반경
+GEOCODE_BUDGET_SEC = 480   # 지오코딩 전체 시간 예산. 초과하면 남은 주소는 근사로 넘긴다.
+PROVIDER_TRIP_COUNT = 5    # 제공자 연속 예외 횟수 상한. 초과하면 그 제공자를 끈다.
 
 
 class Geocoder:
@@ -31,6 +33,11 @@ class Geocoder:
         self.hits = 0
         self.lookups = 0
         self.approximated = 0
+        # 러너 IP 가 지오코더에서 차단되면 수천 주소 × 실패 응답으로 잡이 타임아웃난다
+        # (2026-09-03 VWorld 가 GitHub 러너를 차단하는 것을 확인). 예산·서킷브레이커로 막는다.
+        self._deadline: float | None = None
+        self._fails = {"vworld": 0, "kakao": 0}
+        self._dead: set[str] = set()
         if CACHE_PATH.exists():
             try:
                 self.cache = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
@@ -82,14 +89,40 @@ class Geocoder:
 
     # --- providers ----------------------------------------------------
     def _lookup(self, address: str) -> tuple[float, float] | None:
-        for provider in (self._vworld, self._kakao):
+        import sys
+
+        if self._deadline is None:
+            self._deadline = time.monotonic() + GEOCODE_BUDGET_SEC
+        elif time.monotonic() > self._deadline:
+            if self.enabled:
+                print(
+                    f"  지오코딩 시간 예산({GEOCODE_BUDGET_SEC}s) 초과 — 남은 주소는 근사 처리",
+                    file=sys.stderr,
+                )
+            self.enabled = False
+            return None
+
+        for name, provider in (("vworld", self._vworld), ("kakao", self._kakao)):
+            if name in self._dead:
+                continue
             try:
                 coord = provider(address)
-            except Exception:  # noqa: BLE001 - 지오코딩 실패는 근사로 강등하고 계속 간다
+                self._fails[name] = 0
+            except Exception as exc:  # noqa: BLE001 - 지오코딩 실패는 근사로 강등하고 계속 간다
                 coord = None
+                self._fails[name] += 1
+                if self._fails[name] >= PROVIDER_TRIP_COUNT:
+                    self._dead.add(name)
+                    # 예외 메시지에는 키가 든 URL 이 섞일 수 있어 타입만 남긴다.
+                    print(
+                        f"  지오코더 {name} 연속 {PROVIDER_TRIP_COUNT}회 실패({type(exc).__name__}) — 비활성화",
+                        file=sys.stderr,
+                    )
             if coord:
                 time.sleep(0.05)
                 return coord
+        if self._dead.issuperset({"vworld", "kakao"}):
+            self.enabled = False
         return None
 
     def _vworld(self, address: str) -> tuple[float, float] | None:
