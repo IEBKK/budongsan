@@ -126,6 +126,18 @@ def fetch_month(session, endpoint: str, sgg_code: str, ym: str, parser) -> list[
     return collected
 
 
+def redact_keys(message: str) -> str:
+    """예외 메시지에 인증키가 포함된 URL 이 들어올 수 있다(HTTPError 등).
+    이 메시지는 공개 Actions 로그와 meta.json failedRegions 로 흘러가므로 반드시 가린다."""
+    from urllib.parse import quote
+
+    for key in (config.MOLIT_SERVICE_KEY, config.ONBID_SERVICE_KEY):
+        if key:
+            for variant in (key, quote(key, safe=""), quote(key)):
+                message = message.replace(variant, "***")
+    return message
+
+
 def get_with_retry(session, endpoint: str, params: dict) -> str:
     last: Exception | None = None
     for attempt in range(RETRIES):
@@ -136,4 +148,4 @@ def get_with_retry(session, endpoint: str, params: dict) -> str:
         except Exception as exc:  # noqa: BLE001 - 네트워크/HTTP 모두 재시도 대상
             last = exc
             time.sleep(1.5 * (attempt + 1))
-    raise MolitError(f"요청 실패 (재시도 {RETRIES}회): {last}")
+    raise MolitError(redact_keys(f"요청 실패 (재시도 {RETRIES}회): {last}"))

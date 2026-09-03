@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from . import config, mock, transform
 from .geocode import Geocoder
 from .sources import molit_apt, molit_commercial, molit_land, onbid
+from .sources.common import redact_keys
 
 KST = timezone(timedelta(hours=9))
 SIZE_WARN_BYTES = 1_000_000  # 3.4 파일당 목표 크기
@@ -80,8 +81,10 @@ def collect_trade_type(
                 for ym in months:
                     deals.extend(fetch(session, region.code, ym))
         except Exception as exc:  # noqa: BLE001 - 한 지역 실패가 전체를 막지 않게 한다
-            print(f"  [{idx}/{len(regions)}] {region.name} 실패: {exc}", file=sys.stderr)
-            failed.append(f"{kind}/{region.code} {region.name}: {exc}")
+            # 실패 사유는 공개 로그·meta.json 으로 나가므로 인증키를 가린다.
+            reason = redact_keys(str(exc))
+            print(f"  [{idx}/{len(regions)}] {region.name} 실패: {reason}", file=sys.stderr)
+            failed.append(f"{kind}/{region.code} {region.name}: {reason}")
             continue
 
         items = transform.build_trade_items(
@@ -117,8 +120,9 @@ def collect_auction(regions, args, session, geocoder) -> tuple[dict | None, int,
     try:
         things = mock.generate_auction(regions) if args.mock else onbid.fetch_all(session)
     except Exception as exc:  # noqa: BLE001
-        print(f"  공매 수집 실패: {exc}", file=sys.stderr)
-        return None, 0, [f"auction: {exc}"]
+        reason = redact_keys(str(exc))
+        print(f"  공매 수집 실패: {reason}", file=sys.stderr)
+        return None, 0, [f"auction: {reason}"]
 
     seen = load_seen()
     items, skipped = transform.build_auction_items(
