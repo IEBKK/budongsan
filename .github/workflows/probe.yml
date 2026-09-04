@@ -1,0 +1,19 @@
+# data.go.kr 게이트웨이가 GitHub 러너(해외 IP)에서 접속되는지 확인하는 진단용.
+# 2026-09-04 러너 전역 ConnectTimeout 발생 — 해외 IP 차단 여부 추적용으로 만들었다.
+name: probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: apis.data.go.kr 연결 점검
+        run: |
+          # 키 없이 호출 — 연결만 되면 403 + 오류 XML 이 즉시 온다.
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 \
+            'https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev?serviceKey=probe&LAWD_CD=11110&DEAL_YMD=202001' || echo TIMEOUT)
+          echo "apis.data.go.kr → $code"
+          [ "$code" != "TIMEOUT" ] || { echo '러너에서 게이트웨이 접속 불가 (해외 IP 차단 추정)'; exit 1; }

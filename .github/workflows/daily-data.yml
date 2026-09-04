@@ -50,6 +50,15 @@ jobs:
       - name: 파이프라인 테스트
         run: python -m pipeline.tests.test_transform
 
+      # 게이트웨이가 러너 IP 를 차단하면 전 지역이 타임아웃 재시도로 수 시간을 태운다.
+      # 키 없이 연결만 확인 — 접속되면 403 오류 XML 이 즉시 오고, 차단이면 1분 안에 실패한다.
+      - name: 게이트웨이 연결 점검
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --retry 2 \
+            'https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev?serviceKey=probe&LAWD_CD=11110&DEAL_YMD=202001' || echo TIMEOUT)
+          echo "apis.data.go.kr → $code"
+          [ "$code" != "TIMEOUT" ] || { echo '::error::러너에서 data.go.kr 접속 불가 (해외 IP 차단 추정)'; exit 1; }
+
       - name: 실거래가·공매 수집 및 JSON 생성
         env:
           MOLIT_SERVICE_KEY: ${{ secrets.MOLIT_SERVICE_KEY }}
