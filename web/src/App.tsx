@@ -233,6 +233,7 @@ export default function App() {
       <footer className="legal">
         본 서비스의 정보는 참고용이며, 거래·입찰 전 원출처(국토교통부, 온비드, 법원) 확인이 필요합니다.
         {meta && <> 출처: {meta.source}</>} 지도 © OpenStreetMap 기여자.
+        <br />© 2026 IEBKK. All rights reserved. 사전 서면 허가 없는 복제·수정·재배포·상업적 이용을 금합니다.
       </footer>
     </div>
   )
