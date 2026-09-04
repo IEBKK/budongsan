@@ -185,7 +185,9 @@ jobs:
     needs: assemble
     # outputs.changed 로 게이트하면 'Re-run failed jobs' 시 outputs 미전파 버그(GitHub)로
     # skip 된다. assemble 성공이면 무조건 배포한다 — 변경 없어도 재배포는 무해하다.
-    if: needs.assemble.result == 'success'
+    # !cancelled() 가 없으면 암묵적 success() 가 전이적 의존(collect 실패)까지 검사해
+    # assemble 이 성공해도 skip 된다.
+    if: ${{ !cancelled() && needs.assemble.result == 'success' }}
     permissions:
       contents: read
       pages: write
