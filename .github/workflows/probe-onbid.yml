@@ -1,0 +1,63 @@
+# 온비드 응답 원문 진단용. 특정 물건관리번호의 raw <item> XML 을 로그로 덤프한다.
+# (최저입찰가가 감정가의 1% 로 파싱되는 물건들의 원문 확인 — 2026-09-05)
+name: probe-onbid
+
+on:
+  workflow_dispatch:
+    inputs:
+      mgmt_nos:
+        description: '물건관리번호 콤마 구분'
+        default: '2025-03388-001,2025-10929-001,2025-12049-002'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - name: 원문 덤프
+        env:
+          ONBID_SERVICE_KEY: ${{ secrets.ONBID_SERVICE_KEY }}
+          MGMT_NOS: ${{ inputs.mgmt_nos }}
+        run: |
+          python - <<'EOF'
+          import os, re, requests, xml.etree.ElementTree as ET
+          wanted = set(os.environ["MGMT_NOS"].split(","))
+          key = os.environ["ONBID_SERVICE_KEY"]
+          found = 0
+          suspicious = 0
+          page = 1
+          while page < 60 and wanted:
+              r = requests.get(
+                  "https://apis.data.go.kr/1360000/OnbidRlstListSrvc2/getRlstCltrList2",
+                  params={"serviceKey": key, "pageNo": page, "numOfRows": 500},
+                  timeout=30,
+              )
+              text = r.text
+              root = ET.fromstring(text)
+              items = list(root.iter("item"))
+              if not items:
+                  break
+              for item in items:
+                  mgmt = (item.findtext("cltrMngNo") or "").strip()
+                  low = (item.findtext("lowstBidPrcIndctCont") or "").strip()
+                  aps = (item.findtext("apslEvlAmt") or "").strip()
+                  # 파싱값 기준 100배 의심 케이스 집계
+                  ld = re.sub(r"\D", "", low)
+                  ad = re.sub(r"\D", "", aps)
+                  if ld and ad and int(ad) > 0 and 90 <= int(ad) / max(1, int(ld)) <= 110:
+                      suspicious += 1
+                      if suspicious <= 3 and mgmt not in wanted:
+                          wanted.add(mgmt)  # 표본 확대
+                  if mgmt in wanted:
+                      print(f"=== {mgmt} raw ===")
+                      print(ET.tostring(item, encoding="unicode")[:2000])
+                      wanted.discard(mgmt)
+                      found += 1
+              page += 1
+          print(f"덤프 {found}건 / 100배 의심 {suspicious}건 / 미발견 {sorted(wanted)}")
+          EOF
