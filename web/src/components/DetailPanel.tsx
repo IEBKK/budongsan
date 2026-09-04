@@ -258,6 +258,12 @@ function AuctionDetail({ item }: { item: VisibleAuction }) {
               {item.extra.mgmtNo}
             </span>
           )}
+          {(item.roundCount ?? 1) > 1 && (
+            <span>
+              <i>공고 회차</i>
+              {item.roundCount}건 중 대표 회차 표시
+            </span>
+          )}
           <span>
             <i>최초 관측</i>
             {item.firstSeen}

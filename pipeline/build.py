@@ -167,7 +167,8 @@ def collect_auction(regions, args, session, geocoder) -> tuple[dict | None, int,
         seen,
         today,
     )
-    save_seen(seen, {t.key for t in things})
+    # seen 키는 물건관리번호 단위 (transform.auction_group_key 와 동일 기준)
+    save_seen(seen, {transform.auction_group_key(t) for t in things})
 
     summary = transform.build_auction_summary(items)
     size = write_json(

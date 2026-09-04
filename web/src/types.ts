@@ -134,6 +134,8 @@ export interface AuctionItem {
   /** 최저가 / 감정가 (%) */
   bidRate: number | null
   failCount: number
+  /** 이 물건에 잡힌 입찰 회차(공매조건) 수 — 대표 회차 1건만 표시된다 */
+  roundCount?: number
   beginAt: string
   closeAt: string
   status: string

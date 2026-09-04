@@ -219,6 +219,11 @@ def build_search_index(region, complexes: list[dict]) -> list[dict]:
 
 # ── 경매·공매 (PRD 3.2-D Phase 1: 온비드 공매) ──────────────────────────
 
+def auction_group_key(t) -> str:
+    """물건 단위 그룹 키 — 물건관리번호. 없으면(모의 데이터 등) 회차 키로 폴백."""
+    return (getattr(t, "extra", {}) or {}).get("mgmtNo") or t.key
+
+
 def build_auction_items(
     things: Iterable,
     regions: list,
@@ -233,24 +238,47 @@ def build_auction_items(
     """
     from .config import region_by_address
 
+    # 온비드는 같은 물건(물건관리번호)이라도 입찰 회차(공매조건)마다 별도 행을 준다.
+    # 회차를 그대로 노출하면 같은 주소가 최저가만 다르게 줄줄이 보이므로,
+    # 물건 단위로 묶어 대표 회차 1건만 내보낸다: 진행 중(마감 전) 회차가 있으면
+    # 그중 마감이 가장 이른 것, 전부 지났으면 가장 최근에 마감된 것.
+    groups: dict[str, list] = {}
+    for t in things:
+        groups.setdefault(auction_group_key(t), []).append(t)
+
+    # seen 키를 회차 키에서 물건관리번호로 이관한다 (구 키: '<관리번호>-<공매조건번호>').
+    legacy_first: dict[str, str] = {}
+    for k, v in seen.items():
+        base = k.rsplit("-", 1)[0]
+        if base not in legacy_first or v < legacy_first[base]:
+            legacy_first[base] = v
+
     out: list[dict] = []
     skipped = 0
-    for t in things:
+    for mgmt, rounds in groups.items():
+        active = [r for r in rounds if not r.close_at or r.close_at[:10] >= today]
+        t = (
+            min(active, key=lambda r: r.close_at or "9999")
+            if active
+            else max(rounds, key=lambda r: r.close_at)
+        )
         region = region_by_address(regions, t.address)
         if region is None:
             # seed 범위 밖 물건은 좌표를 붙일 수 없다.
             skipped += 1
             continue
 
-        first_seen = seen.setdefault(t.key, today)
+        first_seen = seen.get(mgmt) or legacy_first.get(mgmt) or today
+        seen[mgmt] = first_seen
         umd, jibun = _split_address(t.address, region.name)
         lat, lng, geo_kind = resolve_geo(region, umd, jibun)
 
         out.append(
             {
                 "kind": "auction",
-                "id": hashlib.sha1(t.key.encode("utf-8")).hexdigest()[:10],
-                "key": t.key,
+                "id": hashlib.sha1(mgmt.encode("utf-8")).hexdigest()[:10],
+                "key": mgmt,
+                "roundCount": len(rounds),
                 "name": t.name,
                 "category": t.category,
                 "address": t.address,
