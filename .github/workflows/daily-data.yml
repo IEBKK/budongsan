@@ -69,9 +69,12 @@ jobs:
       - name: 게이트웨이 연결 점검
         run: |
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --retry 2 \
-            'https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev?serviceKey=probe&LAWD_CD=11110&DEAL_YMD=202001' || echo TIMEOUT)
+            'https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev?serviceKey=probe&LAWD_CD=11110&DEAL_YMD=202001') || code=TIMEOUT
           echo "apis.data.go.kr → $code"
-          [ "$code" != "TIMEOUT" ] || { echo '::error::러너에서 data.go.kr 접속 불가 (해외 IP 차단 추정)'; exit 1; }
+          # 000 = 연결 실패 시에도 -w 가 찍는 값. 3자리 HTTP 코드만 통과시킨다.
+          case "$code" in
+            000*|TIMEOUT) echo '::error::러너에서 data.go.kr 접속 불가 (해외 IP 차단 추정)'; exit 1 ;;
+          esac
 
       # 아티팩트에 이 권역의 신선한 파일만 담기 위해 체크아웃된 기존 산출물을 비운다.
       - name: 기존 산출물 비우기

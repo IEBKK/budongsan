@@ -14,6 +14,8 @@ jobs:
         run: |
           # 키 없이 호출 — 연결만 되면 403 + 오류 XML 이 즉시 온다.
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 \
-            'https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev?serviceKey=probe&LAWD_CD=11110&DEAL_YMD=202001' || echo TIMEOUT)
+            'https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev?serviceKey=probe&LAWD_CD=11110&DEAL_YMD=202001') || code=TIMEOUT
           echo "apis.data.go.kr → $code"
-          [ "$code" != "TIMEOUT" ] || { echo '러너에서 게이트웨이 접속 불가 (해외 IP 차단 추정)'; exit 1; }
+          case "$code" in
+            000*|TIMEOUT) echo '러너에서 게이트웨이 접속 불가 (해외 IP 차단 추정)'; exit 1 ;;
+          esac
