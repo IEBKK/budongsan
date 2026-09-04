@@ -26,7 +26,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # ref 를 명시하지 않으면 github.sha(워크플로 시작 시점 커밋)를 받는다.
+      # daily-data 가 데이터 커밋을 push 한 뒤 호출하므로 최신 main 을 명시해야
+      # 방금 커밋된 데이터가 배포에 포함된다.
       - uses: actions/checkout@v5
+        with:
+          ref: main
       - uses: actions/setup-node@v5
         with:
           node-version: '20'

@@ -24,7 +24,8 @@ const TABS: { id: PropertyType; label: string; note?: string }[] = [
   { id: 'auction', label: '경매·공매', note: '현재 온비드 공매만 제공 (법원경매 미포함)' },
 ]
 
-const SEOUL: [number, number] = [37.5326, 126.9905]
+// 전국 수집이므로 한반도 남부 전체가 보이는 시점에서 시작한다.
+const KOREA: [number, number] = [36.2, 127.8]
 
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null)
@@ -165,7 +166,7 @@ export default function App() {
         <p className="scope-note" role="note">
           {activeTab.note}
           {auctionFile && auctionFile.outOfScopeCount > 0 && (
-            <> · 수집 범위(서울) 밖 {auctionFile.outOfScopeCount}건은 제외됨</>
+            <> · 수집 범위 밖 {auctionFile.outOfScopeCount}건은 제외됨</>
           )}
         </p>
       )}
@@ -173,8 +174,8 @@ export default function App() {
       <div className={`content pane-${mobilePane}`}>
         <div className="map-wrap">
           <MapView
-            center={SEOUL}
-            zoom={12}
+            center={KOREA}
+            zoom={7}
             type={type}
             regions={nation}
             items={items}

@@ -42,8 +42,9 @@ cd web && npm install && npm run dev
    - 국토교통부 **토지 매매 신고 조회 서비스**
    - 한국자산관리공사 **온비드 공매물건 정보** → `ONBID_SERVICE_KEY`
 
-   호출량은 `시군구 수 × 3개월 × 3종`. 서울 25개 구면 하루 225회로 개발계정(일 1,000회) 안에 들어가지만,
-   전국 250개 구로 늘리면 2,250회라 운영계정 신청이 필요하다. 온비드는 전국을 한 번에 받으므로 수 회면 끝난다.
+   호출량은 API 별로 `시군구 수 × 3개월`(+페이징). 전국 269개 시군구면 API 당 하루 약 810회로
+   개발계정 한도(일 1,000회/API) 안이지만 여유가 15% 남짓이다. 재시도가 잦아 한도에 걸리면
+   해당 API 의 운영계정(트래픽 증량)을 신청한다. 온비드는 전국을 한 번에 받으므로 수 회면 끝난다.
 2. (선택) [VWorld](https://www.vworld.kr) 또는 [Kakao Developers](https://developers.kakao.com) 키 발급 → 정밀 좌표.
    없으면 시군구 중심 근사 좌표를 쓰고 UI 에 `위치 근사` 배지가 붙는다.
 3. `.env.example` 을 참고해 환경변수 설정 후:
@@ -72,7 +73,8 @@ pipeline/               # 수집 → 집계 → JSON (Python 표준 라이브러
   transform.py          #   유형 공통 집계 + 공매 집계(최저가율·유찰·NEW)
   geocode.py            #   주소→좌표 (VWorld/Kakao) + 저장소 캐시 + 근사 폴백
   mock.py               #   API 키 없이 쓰는 합성 데이터 (4개 유형)
-  seed/regions.json     #   시군구 코드 + 중심좌표 (현재 서울 25개 구)
+  seed/regions.json     #   시군구 코드 + 중심좌표 (전국 269개 시군구)
+  scripts/make_regions.py #  법정동코드 전체자료(code.go.kr)로 seed 재생성
   cache/geocode.json    #   지오코딩 캐시 — 커밋 대상. 지우면 호출량이 폭증한다
   cache/auction_seen.json #  공매 물건 최초 관측일 — NEW 뱃지 판정 근거. 커밋 대상
   fixtures/             #   4종 API 응답 샘플 (구/신 필드 표기 혼재)
@@ -152,8 +154,8 @@ Cloudflare Pages 로 옮기려면 `deploy.yml` 만 교체하고 `VITE_BASE` 를 
 
 ## 알려진 제약
 
-- **수집 범위가 서울 25개 구**다. 전국으로 넓히려면 행정안전부 법정동코드 전체자료로
-  `pipeline/seed/regions.json` 을 재생성해야 한다 (시군구 중심좌표 포함).
+- **행정구역은 2026년 개편 기준**(전남광주통합특별시 등)이다. 개편이 또 있으면
+  `python -m pipeline.scripts.make_regions` 로 seed 를 재생성한다.
 - **좌표가 근사값**이다. VWorld/Kakao 키를 넣기 전까지 마커는 구 중심에서 반경 900m 안에
   결정적으로 흩뿌려진다. 같은 단지는 항상 같은 자리에 찍히지만 실제 위치는 아니다.
 - **매매만** 있다. 전월세는 별도 API 라 아직 붙이지 않았다.

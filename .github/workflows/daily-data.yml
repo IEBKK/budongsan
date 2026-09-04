@@ -33,7 +33,8 @@ jobs:
     outputs:
       changed: ${{ steps.commit.outputs.changed }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 전국 269개 시군구 × 3유형 × 3개월 ≈ 2,400여 호출. 호출당 ~1.5초로 넉넉히 잡는다.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v5
 

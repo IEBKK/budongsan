@@ -238,7 +238,7 @@ def build_auction_items(
     for t in things:
         region = region_by_address(regions, t.address)
         if region is None:
-            # seed 범위(현재 서울) 밖 물건은 좌표를 붙일 수 없다.
+            # seed 범위 밖 물건은 좌표를 붙일 수 없다.
             skipped += 1
             continue
 

@@ -23,15 +23,18 @@ class Region:
     name: str
     lat: float
     lng: float
+    # 행정개편 구명칭(예: 전남광주통합특별시 ← 광주광역시/전라남도). 주소 매칭에만 쓴다.
+    aliases: tuple[str, ...] = ()
 
     @property
     def full_name(self) -> str:
-        return f"{self.sido} {self.name}"
+        # 세종처럼 시도=시군구 단층 지역은 이름을 반복하지 않는다.
+        return self.sido if self.sido == self.name else f"{self.sido} {self.name}"
 
 
 def load_regions() -> list[Region]:
     raw = json.loads((SEED_DIR / "regions.json").read_text(encoding="utf-8"))
-    regions = [Region(**r) for r in raw["regions"]]
+    regions = [Region(**{**r, "aliases": tuple(r.get("aliases", ()))}) for r in raw["regions"]]
     only = _env("TARGET_REGIONS")
     if only:
         wanted = {c.strip() for c in only.split(",") if c.strip()}
@@ -45,14 +48,17 @@ def load_regions() -> list[Region]:
 def region_by_address(regions: list[Region], address: str) -> Region | None:
     """온비드 주소 문자열에서 시군구를 찾아낸다.
 
-    seed/regions.json 범위(현재 서울) 밖 물건은 좌표를 붙일 수 없어 None 을 돌려주고,
+    seed/regions.json 범위 밖 물건은 좌표를 붙일 수 없어 None 을 돌려주고,
     호출측에서 제외 건수를 meta 에 남긴다.
     """
     if not address:
         return None
     for r in regions:
-        # '서울특별시 강남구 …' / '서울 강남구 …' 두 표기를 모두 받는다.
-        if r.name in address and (r.sido in address or r.sido[:2] in address):
+        # '서울특별시 강남구 …' / '서울 강남구 …' 두 표기를 모두 받고,
+        # 행정개편 이전 구명칭(aliases: 광주광역시 동구 등)도 허용한다.
+        if r.name in address and (
+            r.sido in address or r.sido[:2] in address or any(a in address for a in r.aliases)
+        ):
             return r
     return None
 
