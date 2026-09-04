@@ -33,12 +33,18 @@ jobs:
           wanted = set(os.environ["MGMT_NOS"].split(","))
           key = os.environ["ONBID_SERVICE_KEY"]
           found = suspicious = scanned = 0
-          for prpt in PRPT_DIV_CDS:
+          for prpt in reversed(PRPT_DIV_CDS):
               for pvct in ("Y", "N"):
                   for page in range(1, 41):
-                      r = requests.get(ENDPOINT, params={
-                          "serviceKey": key, "prptDivCd": prpt, "pvctTrgtYn": pvct,
-                          "numOfRows": 200, "pageNo": page}, timeout=30)
+                      for attempt in range(3):
+                          try:
+                              r = requests.get(ENDPOINT, params={
+                                  "serviceKey": key, "prptDivCd": prpt, "pvctTrgtYn": pvct,
+                                  "numOfRows": 200, "pageNo": page}, timeout=30)
+                              break
+                          except Exception:
+                              if attempt == 2: raise
+
                       root = ET.fromstring(r.text)
                       items = list(root.iter("item"))
                       scanned += len(items)
