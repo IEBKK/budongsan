@@ -83,6 +83,8 @@ const FAIL_COUNTS: { label: string; min: number | null }[] = [
 ]
 
 const STATUSES: { label: string; value: AuctionStatusFilter }[] = [
+  { label: '추천 (입찰 가능 · 할인)', value: 'recommend' },
+  { label: '입찰 가능', value: 'biddable' },
   { label: '전체', value: 'all' },
   { label: '신규(NEW)', value: 'new' },
   { label: '마감 임박', value: 'closing' },

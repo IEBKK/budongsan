@@ -78,7 +78,13 @@ function AuctionCard({ item }: { item: VisibleAuction }) {
         <span>
           {item.regionName} {item.umd}
         </span>
-        <span>{item.bidRate !== null ? `감정가의 ${Math.round(item.bidRate)}%` : '감정가 미상'}</span>
+        <span>
+          {item.bidRate === null
+            ? '감정가 미상'
+            : item.disposal === '임대'
+              ? `대부료 · 감정가의 ${Math.round(item.bidRate)}%`
+              : `감정가의 ${Math.round(item.bidRate)}%`}
+        </span>
       </div>
       <div className="card-meta">
         <span>{shortCategory(item.category)}</span>

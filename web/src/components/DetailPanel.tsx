@@ -202,11 +202,18 @@ function AuctionDetail({ item }: { item: VisibleAuction }) {
         </div>
       </div>
 
-      {discount > 0 && (
+      {item.disposal === '임대' ? (
         <p className="callout">
-          감정가 대비 <b>{formatAmount(discount)}</b> 낮음
-          {item.failCount > 0 && ` · ${item.failCount}회 유찰 누적`}
+          임대(대부) 물건 — 최저입찰가는 매매가가 아니라 <b>대부료(임대료)</b>입니다.
+          감정가 대비 비율이 낮게 보이는 것이 정상입니다.
         </p>
+      ) : (
+        discount > 0 && (
+          <p className="callout">
+            감정가 대비 <b>{formatAmount(discount)}</b> 낮음
+            {item.failCount > 0 && ` · ${item.failCount}회 유찰 누적`}
+          </p>
+        )
       )}
 
       <section>

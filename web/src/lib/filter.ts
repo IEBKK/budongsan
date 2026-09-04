@@ -14,7 +14,8 @@ export const DEFAULT_FILTERS: Filters = {
   maxAmount: null,
   minArea: null,
   maxArea: null,
-  auctionStatus: 'all',
+  // 경매·공매 탭 기본값: 입찰 가능하고 수익 여지가 있는 물건만 (전체는 드롭다운에서 선택)
+  auctionStatus: 'recommend',
   maxBidRate: null,
   minFailCount: null,
 }
@@ -111,7 +112,21 @@ export function applyAuctionFilters(
   if (f.minFailCount !== null && item.failCount < f.minFailCount) return null
 
   const daysToClose = daysUntil(item.closeAt, now)
+  // 입찰 가능: 마감 전이거나, 마감 후에도 수의계약이 열려 있는 물건
+  const biddable =
+    (daysToClose !== null && daysToClose >= 0) || item.status.includes('수의계약')
   if (f.auctionStatus === 'new' && !item.isNew) return null
+  if (f.auctionStatus === 'biddable' && !biddable) return null
+  if (f.auctionStatus === 'recommend') {
+    // 수익 후보: 입찰 가능한 매각 물건 중 감정가 대비 5~80% 할인 구간.
+    // 5% 미만 극한 유찰은 권리하자·특수물건 가능성이 커서 기본 추천에서 제외한다.
+    const profitable =
+      item.disposal === '매각' &&
+      item.bidRate !== null &&
+      item.bidRate >= 5 &&
+      item.bidRate <= 80
+    if (!biddable || !profitable) return null
+  }
   if (
     f.auctionStatus === 'closing' &&
     (daysToClose === null || daysToClose < 0 || daysToClose > CLOSING_SOON_DAYS)

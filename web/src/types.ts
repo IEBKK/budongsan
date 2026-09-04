@@ -177,7 +177,7 @@ export function isAuction(item: VisibleItem): item is VisibleAuction {
   return item.kind === 'auction'
 }
 
-export type AuctionStatusFilter = 'all' | 'new' | 'closing'
+export type AuctionStatusFilter = 'all' | 'recommend' | 'biddable' | 'new' | 'closing'
 
 export interface Filters {
   /** 실거래 3종: 최근 N개월 */
