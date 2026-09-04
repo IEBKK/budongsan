@@ -137,6 +137,16 @@ export default function App() {
               {meta.mock && <em className="mock-tag">모의 데이터</em>}
             </span>
           )}
+          {/* hits.sh 무가입 카운터 — 오늘/누적 페이지뷰. 프로덕션 도메인에서만 의미 있음 */}
+          {!import.meta.env.DEV && (
+            <img
+              className="visits-badge"
+              src="https://hits.sh/iebkk.github.io/budongsan.svg?view=today-total&label=%EB%B0%A9%EB%AC%B8&color=6b7280&labelColor=374151"
+              alt="방문 수 (오늘/누적)"
+              title="방문 수 (오늘 / 누적)"
+              height={20}
+            />
+          )}
         </div>
         <SearchBox onPick={onPickSearch} />
       </header>

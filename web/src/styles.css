@@ -30,6 +30,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .brand strong { font-size: 15px; white-space: nowrap; }
 .asof { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+.visits-badge { vertical-align: middle; margin-left: 8px; border-radius: 3px; }
 .mock-tag {
   margin-left: 6px; padding: 1px 5px; border-radius: 4px; font-style: normal;
   background: #fff4e5; color: #b45309; font-size: 11px;
