@@ -183,7 +183,9 @@ jobs:
 
   deploy:
     needs: assemble
-    if: needs.assemble.outputs.changed == 'true'
+    # outputs.changed 로 게이트하면 'Re-run failed jobs' 시 outputs 미전파 버그(GitHub)로
+    # skip 된다. assemble 성공이면 무조건 배포한다 — 변경 없어도 재배포는 무해하다.
+    if: needs.assemble.result == 'success'
     permissions:
       contents: read
       pages: write
