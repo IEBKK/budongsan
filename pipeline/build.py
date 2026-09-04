@@ -199,6 +199,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--no-geocode", action="store_true", help="외부 지오코딩 호출 생략")
     parser.add_argument(
+        "--tolerate-failures",
+        action="store_true",
+        help="수집이 전량 실패해도 실패 처리하지 않고 디스크 자료로 조립을 계속한다 (assemble 잡 용)",
+    )
+    parser.add_argument(
         "--refresh-approx",
         action="store_true",
         help="캐시된 근사 좌표를 정밀 좌표로 재조회 (지오코딩 키를 새로 넣은 직후 1회)",
@@ -262,8 +267,10 @@ def main(argv: list[str] | None = None) -> int:
         failed.extend(errs)
 
     # 시도한 수집 단위(유형×지역 + 공매)가 전부 실패했을 때만 실패 처리한다.
+    # assemble 잡은 --tolerate-failures 로 계속 간다: 공매가 죽어도(러너 IP 차단 등)
+    # 권역 아티팩트로 병합된 거래 데이터를 조립·커밋하는 게 우선이다.
     attempted = sum(1 for k in kinds if k in TRADE_TYPES) * len(regions) + (1 if "auction" in kinds else 0)
-    if attempted and len(failed) >= attempted:
+    if attempted and len(failed) >= attempted and not args.tolerate_failures:
         print("\n수집이 전량 실패했다. 파이프라인 실패로 처리한다.", file=sys.stderr)
         return 1
 

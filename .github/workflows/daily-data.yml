@@ -156,7 +156,9 @@ jobs:
           VWORLD_KEY: ${{ secrets.VWORLD_KEY }}
           KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
           ROLLING_MONTHS: '3'
-        run: python -m pipeline.build --types auction
+        # --tolerate-failures: 공매가 실패해도(러너 IP 차단 등) 직전 onbid.json 을 유지한 채
+        # 권역 거래 데이터 조립·커밋을 계속한다.
+        run: python -m pipeline.build --types auction --tolerate-failures
 
       - name: 산출물 요약
         run: |
