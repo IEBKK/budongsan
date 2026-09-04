@@ -32,14 +32,20 @@ class Region:
         return self.sido if self.sido == self.name else f"{self.sido} {self.name}"
 
 
-def load_regions() -> list[Region]:
+def load_regions(filtered: bool = True) -> list[Region]:
+    """filtered=False 면 TARGET_REGIONS 를 무시하고 seed 전체를 돌려준다 (전국 요약 재구성용)."""
     raw = json.loads((SEED_DIR / "regions.json").read_text(encoding="utf-8"))
     regions = [Region(**{**r, "aliases": tuple(r.get("aliases", ()))}) for r in raw["regions"]]
-    only = _env("TARGET_REGIONS")
+    only = _env("TARGET_REGIONS") if filtered else ""
     if only:
+        # 5자리 = 시군구 코드, 2자리 = 시도 프리픽스 (권역 분할 수집용. 예: "11,28")
         wanted = {c.strip() for c in only.split(",") if c.strip()}
-        regions = [r for r in regions if r.code in wanted]
-        missing = wanted - {r.code for r in regions}
+        prefixes = {w for w in wanted if len(w) == 2}
+        codes = wanted - prefixes
+        regions = [r for r in regions if r.code in codes or r.code[:2] in prefixes]
+        missing = (codes - {r.code for r in regions}) | {
+            p for p in prefixes if not any(r.code[:2] == p for r in regions)
+        }
         if missing:
             raise SystemExit(f"TARGET_REGIONS에 seed/regions.json에 없는 코드가 있다: {sorted(missing)}")
     return regions

@@ -63,11 +63,13 @@ def save_seen(seen: dict[str, str], keep_keys: set[str]) -> None:
 
 def collect_trade_type(
     kind: str, regions, months, args, session, geocoder
-) -> tuple[list[dict], list[dict], int, int, list[str]]:
-    """실거래가 1종을 전 지역 수집·집계하고 지역별 JSON 을 쓴다."""
+) -> tuple[int, int, list[str]]:
+    """실거래가 1종을 전 지역 수집하고 지역별 JSON 을 쓴다.
+
+    요약·검색 인덱스는 여기서 만들지 않는다 — 권역 분할 실행에서 이번에 안 돈
+    지역이 전국 요약에서 빠지지 않도록, main() 이 디스크 파일 전체로 재구성한다.
+    """
     out_dir, fetch, make_mock = TRADE_TYPES[kind]
-    summary: list[dict] = []
-    search_index: list[dict] = []
     failed: list[str] = []
     total_deals = 0
     total_bytes = 0
@@ -103,15 +105,48 @@ def collect_trade_type(
         )
         total_bytes += size
         total_deals += len(deals)
-        summary.append(transform.build_region_summary(region, items, months))
-        if kind == "apt":
-            # 검색 인덱스는 단지명 검색이 의미 있는 아파트만 담는다 (파일 크기 억제).
-            search_index.extend(transform.build_search_index(region, items))
         print(
             f"  [{idx}/{len(regions)}] {region.name:6s} 거래 {len(deals):5d} / 항목 {len(items):4d} / {size/1024:6.1f} KB"
         )
 
-    return summary, search_index, total_deals, total_bytes, failed
+    return total_deals, total_bytes, failed
+
+
+def rebuild_outputs(today_iso: str) -> tuple[dict, list, dict, list[str]]:
+    """디스크의 지역 파일 전체로 유형별 요약·검색 인덱스·건수를 재구성한다.
+
+    권역 분할(TARGET_REGIONS 프리픽스) 실행이 전국 요약을 덮어쓰지 않게 하는 핵심.
+    돌려주는 stale 은 오늘 갱신되지 않았거나 아예 없는 지역 파일 목록이다.
+    """
+    all_regions = config.load_regions(filtered=False)
+    summaries: dict[str, list[dict]] = {}
+    search_index: list[dict] = []
+    disk_counts: dict[str, int] = {}
+    stale: list[str] = []
+
+    for kind, (out_dir, _, _) in TRADE_TYPES.items():
+        entries: list[dict] = []
+        for region in all_regions:
+            path = config.OUT_DIR / out_dir / f"{region.code}.json"
+            if not path.exists():
+                stale.append(f"{kind}/{region.code} {region.name}: 미수집")
+                continue
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                stale.append(f"{kind}/{region.code} {region.name}: 파일 손상")
+                continue
+            entries.append(transform.build_region_summary(region, data["items"], data["months"]))
+            if kind == "apt":
+                # 검색 인덱스는 단지명 검색이 의미 있는 아파트만 담는다 (파일 크기 억제).
+                search_index.extend(transform.build_search_index(region, data["items"]))
+            if data.get("generatedAt", "")[:10] != today_iso:
+                stale.append(f"{kind}/{region.code} {region.name}: {data.get('generatedAt', '?')[:10]} 자료")
+        if entries:
+            summaries[kind] = entries
+            disk_counts[kind] = sum(e["dealCount"] for e in entries)
+
+    return summaries, search_index, disk_counts, stale
 
 
 def collect_auction(regions, args, session, geocoder) -> tuple[dict | None, int, list[str]]:
@@ -210,9 +245,7 @@ def main(argv: list[str] | None = None) -> int:
     failed: list[str] = []
     total_bytes = 0
     deal_counts: dict[str, int] = {}
-    summaries: dict[str, list[dict]] = {}
     auction_summary: dict | None = None
-    search_index: list[dict] = []
 
     for kind in kinds:
         if kind == "auction":
@@ -223,17 +256,15 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
         print(f"\n[{kind}] 시군구별 수집")
-        summary, index, deals, size, errs = collect_trade_type(
-            kind, regions, months, args, session, geocoder
-        )
-        summaries[kind] = summary
-        search_index.extend(index)
+        deals, size, errs = collect_trade_type(kind, regions, months, args, session, geocoder)
         deal_counts[kind] = deals
         total_bytes += size
         failed.extend(errs)
 
-    if not summaries and auction_summary is None:
-        print("\n수집된 데이터가 없다. 파이프라인 실패로 처리한다.", file=sys.stderr)
+    # 시도한 수집 단위(유형×지역 + 공매)가 전부 실패했을 때만 실패 처리한다.
+    attempted = sum(1 for k in kinds if k in TRADE_TYPES) * len(regions) + (1 if "auction" in kinds else 0)
+    if attempted and len(failed) >= attempted:
+        print("\n수집이 전량 실패했다. 파이프라인 실패로 처리한다.", file=sys.stderr)
         return 1
 
     geocoder.save()
@@ -253,11 +284,11 @@ def main(argv: list[str] | None = None) -> int:
     }
     available["auction"] = (config.OUT_DIR / "auction" / "onbid.json").exists()
 
-    # 이번에 안 돌린 유형의 건수·요약은 직전 meta 값을 이어받는다.
-    merged_counts = {**prev_meta.get("dealCountByType", {}), **deal_counts}
+    now = datetime.now(KST)
+    # 요약·검색인덱스·건수는 이번 실행 결과가 아니라 디스크 파일 전체에서 만든다.
+    summaries, search_index, disk_counts, stale = rebuild_outputs(now.date().isoformat())
     merged_auction = auction_summary if auction_summary is not None else prev_meta.get("auction")
 
-    now = datetime.now(KST)
     # DATA-05: '데이터 기준일'은 수집 시각 기준. 실거래 신고 지연은 별도 안내한다.
     meta = {
         "generatedAt": now.isoformat(timespec="seconds"),
@@ -265,12 +296,14 @@ def main(argv: list[str] | None = None) -> int:
         "months": months,
         "source": "국토교통부 실거래가 공개시스템 · 온비드(한국자산관리공사) (공공데이터포털)",
         "mock": args.mock,
-        "regionCount": len(regions),
+        "regionCount": len(config.load_regions(filtered=False)),
         "collectedTypes": kinds,
-        "dealCount": sum(merged_counts.values()),
-        "dealCountByType": merged_counts,
+        "dealCount": sum(disk_counts.values()),
+        "dealCountByType": disk_counts,
         "auction": merged_auction,
         "failedRegions": failed,
+        # 오늘 갱신되지 못한(또는 아예 없는) 지역 파일 — 권역 분할 실행의 구멍 감지용.
+        "staleCount": len(stale),
         "geocode": {
             "cached": geocoder.hits,
             "lookups": geocoder.lookups,
@@ -300,6 +333,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     if failed:
         print(f"실패 {len(failed)}건 — meta.json 의 failedRegions 참고", file=sys.stderr)
+    if stale:
+        print(f"미갱신 지역 파일 {len(stale)}건 (오래된 자료로 요약에 포함됨):", file=sys.stderr)
+        for line in stale[:20]:
+            print(f"  {line}", file=sys.stderr)
+        if len(stale) > 20:
+            print(f"  … 외 {len(stale)-20}건", file=sys.stderr)
     # 부분 실패는 배포를 막지 않는다. 전량 실패만 실패 처리(위에서 return 1).
     return 0
 

@@ -1,6 +1,13 @@
 # DATA-01: 매일 KST 06:00 에 데이터 파이프라인을 돌리고 결과를 커밋한다.
 # 커밋이 생기면 deploy.yml 이 이어서 정적 사이트를 재배포한다.
 # DATA-04: 스케줄 워크플로 실패 시 GitHub 이 저장소 소유자에게 이메일을 보낸다.
+#
+# 전국 256개 시군구를 6개 권역으로 나눠 병렬 수집한다:
+# - 실패 격리: 한 권역이 죽어도 나머지는 산다. 'Re-run failed jobs' 로 실패 권역만 재실행.
+# - IP 분산: data.go.kr 이 러너 IP 대역을 간헐 차단하므로(2026-09-04 관측),
+#   잡마다 다른 러너를 받아 전멸 확률을 줄인다. 각 잡에 사전 연결 점검이 있다.
+# - 요약은 assemble 잡이 디스크 파일 전체로 재구성하므로(build.py rebuild_outputs)
+#   부분 수집이 전국 요약을 덮어쓰지 않는다.
 name: daily-data
 
 on:
@@ -8,14 +15,6 @@ on:
     - cron: '0 21 * * *' # 21:00 UTC = 06:00 KST
   workflow_dispatch:
     inputs:
-      regions:
-        description: '수집할 시군구 코드 (콤마 구분, 비우면 전체)'
-        required: false
-        default: ''
-      types:
-        description: '수집할 유형 (콤마 구분)'
-        required: false
-        default: 'apt,commercial,land,auction'
       refresh_approx:
         description: '근사 좌표를 정밀 좌표로 재조회 (지오코딩 키 등록 후 1회)'
         type: boolean
@@ -29,12 +28,26 @@ permissions:
   contents: write
 
 jobs:
-  build-data:
-    outputs:
-      changed: ${{ steps.commit.outputs.changed }}
+  collect:
+    strategy:
+      fail-fast: false # 한 권역 실패가 다른 권역을 취소하지 않게
+      matrix:
+        include:
+          - block: capital       # 서울 + 인천 (36)
+            prefixes: '11,28'
+          - block: gyeonggi      # 경기 (47)
+            prefixes: '41'
+          - block: jungbu        # 대전·세종·충북·충남·강원 (54)
+            prefixes: '30,36,43,44,51'
+          - block: honam-jeju    # 전남광주 + 전북 + 제주 (44)
+            prefixes: '12,52,50'
+          - block: yeongnam-buk  # 대구 + 경북 (32)
+            prefixes: '27,47'
+          - block: yeongnam-nam  # 부산 + 울산 + 경남 (43)
+            prefixes: '26,31,48'
+    name: collect (${{ matrix.block }})
     runs-on: ubuntu-latest
-    # 전국 269개 시군구 × 3유형 × 3개월 ≈ 2,400여 호출. 호출당 ~1.5초로 넉넉히 잡는다.
-    timeout-minutes: 150
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v5
 
@@ -52,6 +65,7 @@ jobs:
 
       # 게이트웨이가 러너 IP 를 차단하면 전 지역이 타임아웃 재시도로 수 시간을 태운다.
       # 키 없이 연결만 확인 — 접속되면 403 오류 XML 이 즉시 오고, 차단이면 1분 안에 실패한다.
+      # 실패하면 이 권역 잡만 죽는다 → 'Re-run failed jobs' 로 새 러너(새 IP)를 받아 재시도.
       - name: 게이트웨이 연결 점검
         run: |
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --retry 2 \
@@ -59,19 +73,91 @@ jobs:
           echo "apis.data.go.kr → $code"
           [ "$code" != "TIMEOUT" ] || { echo '::error::러너에서 data.go.kr 접속 불가 (해외 IP 차단 추정)'; exit 1; }
 
-      - name: 실거래가·공매 수집 및 JSON 생성
+      # 아티팩트에 이 권역의 신선한 파일만 담기 위해 체크아웃된 기존 산출물을 비운다.
+      - name: 기존 산출물 비우기
+        run: rm -rf web/public/data/apt web/public/data/commercial web/public/data/land
+
+      - name: 실거래가 수집 (${{ matrix.block }})
         env:
           MOLIT_SERVICE_KEY: ${{ secrets.MOLIT_SERVICE_KEY }}
+          VWORLD_KEY: ${{ secrets.VWORLD_KEY }}
+          KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+          TARGET_REGIONS: ${{ matrix.prefixes }}
+          ROLLING_MONTHS: '3'
+        run: python -m pipeline.build --types apt,commercial,land ${{ inputs.refresh_approx && '--refresh-approx' || '' }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data-${{ matrix.block }}
+          path: |
+            web/public/data/apt
+            web/public/data/commercial
+            web/public/data/land
+            pipeline/cache/geocode.json
+          retention-days: 3
+
+  assemble:
+    needs: collect
+    # 일부 권역이 실패해도 성공한 권역만으로 조립한다 (빠진 지역은 staleCount 로 드러난다).
+    if: ${{ !cancelled() }}
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+
+      - run: pip install -r pipeline/requirements.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: data-*
+          path: blocks
+
+      - name: 권역 산출물 병합
+        run: |
+          python - <<'EOF'
+          import json, shutil
+          from pathlib import Path
+
+          geocode_path = Path('pipeline/cache/geocode.json')
+          cache = json.loads(geocode_path.read_text(encoding='utf-8')) if geocode_path.exists() else {}
+          copied = 0
+          for block in sorted(Path('blocks').glob('data-*')):
+              for kind in ('apt', 'commercial', 'land'):
+                  src = block / 'web/public/data' / kind
+                  if not src.is_dir():
+                      continue
+                  for f in src.glob('*.json'):
+                      dst = Path('web/public/data') / kind / f.name
+                      dst.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copy2(f, dst)
+                      copied += 1
+              gp = block / 'pipeline/cache/geocode.json'
+              if gp.exists():
+                  cache.update(json.loads(gp.read_text(encoding='utf-8')))
+          geocode_path.write_text(json.dumps(cache, ensure_ascii=False, sort_keys=True, indent=0), encoding='utf-8')
+          print(f'지역 파일 {copied}개 병합 / 지오코딩 캐시 {len(cache)}건')
+          EOF
+
+      # 공매 수집(전국 1회) + 디스크 전체로 요약·검색인덱스·meta 재구성
+      - name: 공매 수집 및 전국 요약 조립
+        env:
           ONBID_SERVICE_KEY: ${{ secrets.ONBID_SERVICE_KEY }}
           VWORLD_KEY: ${{ secrets.VWORLD_KEY }}
           KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
-          TARGET_REGIONS: ${{ github.event.inputs.regions }}
           ROLLING_MONTHS: '3'
-        run: python -m pipeline.build --types "${{ github.event.inputs.types || 'apt,commercial,land,auction' }}" ${{ inputs.refresh_approx && '--refresh-approx' || '' }}
+        run: python -m pipeline.build --types auction
 
       - name: 산출물 요약
         run: |
-          python -c "import json;m=json.load(open('web/public/data/meta.json'));print('기준일',m['dataAsOf'],'/ 지역',m['regionCount'],'/ 거래',m['dealCountByType'],'/ 공매',(m['auction'] or {}).get('count'),'/ 실패',len(m['failedRegions']))"
+          python -c "import json;m=json.load(open('web/public/data/meta.json'));print('기준일',m['dataAsOf'],'/ 지역',m['regionCount'],'/ 거래',m['dealCountByType'],'/ 공매',(m['auction'] or {}).get('count'),'/ 실패',len(m['failedRegions']),'/ 미갱신',m.get('staleCount'))"
           du -sh web/public/data
 
       - name: 변경분 커밋
@@ -85,13 +171,14 @@ jobs:
             echo 'changed=false' >> "$GITHUB_OUTPUT"
           else
             git commit -m "data: $(TZ=Asia/Seoul date +%Y-%m-%d) 자동 갱신"
+            git pull --rebase origin main  # 수집 도중 main 에 다른 커밋이 실렸을 때 대비
             git push
             echo 'changed=true' >> "$GITHUB_OUTPUT"
           fi
 
   deploy:
-    needs: build-data
-    if: needs.build-data.outputs.changed == 'true'
+    needs: assemble
+    if: needs.assemble.outputs.changed == 'true'
     permissions:
       contents: read
       pages: write
