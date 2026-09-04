@@ -12,7 +12,7 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -26,38 +26,36 @@ jobs:
         run: |
           python - <<'EOF'
           import os, re, requests, xml.etree.ElementTree as ET
+          import sys
+          sys.path.insert(0, ".")
+          from pipeline.sources.onbid import ENDPOINT, PRPT_DIV_CDS
+
           wanted = set(os.environ["MGMT_NOS"].split(","))
           key = os.environ["ONBID_SERVICE_KEY"]
-          found = 0
-          suspicious = 0
-          page = 1
-          while page < 60 and wanted:
-              r = requests.get(
-                  "https://apis.data.go.kr/1360000/OnbidRlstListSrvc2/getRlstCltrList2",
-                  params={"serviceKey": key, "pageNo": page, "numOfRows": 500},
-                  timeout=30,
-              )
-              text = r.text
-              root = ET.fromstring(text)
-              items = list(root.iter("item"))
-              if not items:
-                  break
-              for item in items:
-                  mgmt = (item.findtext("cltrMngNo") or "").strip()
-                  low = (item.findtext("lowstBidPrcIndctCont") or "").strip()
-                  aps = (item.findtext("apslEvlAmt") or "").strip()
-                  # 파싱값 기준 100배 의심 케이스 집계
-                  ld = re.sub(r"\D", "", low)
-                  ad = re.sub(r"\D", "", aps)
-                  if ld and ad and int(ad) > 0 and 90 <= int(ad) / max(1, int(ld)) <= 110:
-                      suspicious += 1
-                      if suspicious <= 3 and mgmt not in wanted:
-                          wanted.add(mgmt)  # 표본 확대
-                  if mgmt in wanted:
-                      print(f"=== {mgmt} raw ===")
-                      print(ET.tostring(item, encoding="unicode")[:2000])
-                      wanted.discard(mgmt)
-                      found += 1
-              page += 1
-          print(f"덤프 {found}건 / 100배 의심 {suspicious}건 / 미발견 {sorted(wanted)}")
+          found = suspicious = scanned = 0
+          for prpt in PRPT_DIV_CDS:
+              for pvct in ("Y", "N"):
+                  for page in range(1, 41):
+                      r = requests.get(ENDPOINT, params={
+                          "serviceKey": key, "prptDivCd": prpt, "pvctTrgtYn": pvct,
+                          "numOfRows": 200, "pageNo": page}, timeout=30)
+                      root = ET.fromstring(r.text)
+                      items = list(root.iter("item"))
+                      scanned += len(items)
+                      for item in items:
+                          mgmt = (item.findtext("cltrMngNo") or "").strip()
+                          low = re.sub(r"\D", "", item.findtext("lowstBidPrcIndctCont") or "")
+                          aps = re.sub(r"\D", "", item.findtext("apslEvlAmt") or "")
+                          if low and aps and int(low) > 0 and 90 <= int(aps) / int(low) <= 110:
+                              suspicious += 1
+                              if suspicious <= 3:
+                                  wanted.add(mgmt)
+                          if mgmt in wanted:
+                              print(f"=== {mgmt} (prpt={prpt} pvct={pvct}) ===")
+                              print(ET.tostring(item, encoding="unicode")[:2500])
+                              wanted.discard(mgmt)
+                              found += 1
+                      if len(items) < 200:
+                          break
+          print(f"스캔 {scanned} / 덤프 {found} / 100배 의심 {suspicious} / 미발견 {sorted(wanted)}")
           EOF
