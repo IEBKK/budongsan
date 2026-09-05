@@ -1,5 +1,57 @@
 export type PropertyType = 'apt' | 'commercial' | 'land' | 'auction'
 export type TradeType = Exclude<PropertyType, 'auction'>
+/** 탭 = 물건 유형 + 수익 스크리너 */
+export type TabId = PropertyType | 'screener'
+
+export interface ScreenerUrgentRow {
+  kind: TradeType
+  kindLabel: string
+  region: string
+  umd: string
+  complex: string
+  area: number
+  amount: number
+  median: number
+  drop: number
+  dealtAt: string
+  floor: number | null
+  sampleN: number
+  lat: number
+  lng: number
+  tags: string[]
+}
+
+export interface ScreenerAuctionRow {
+  score: number
+  id: string
+  name: string
+  category: string
+  region: string
+  umd: string
+  minBid: number
+  appraisal: number
+  bidRate: number
+  failCount: number
+  closeAt: string
+  days: number | null
+  status: string
+  liquidity: number
+  tags: string[]
+  mgmtNo: string
+  lat: number
+  lng: number
+  bundle: number
+}
+
+export interface ScreenerFile {
+  generatedAt: string
+  urgentTotal: number
+  urgentByKind: Partial<Record<TradeType, number>>
+  auctionEligible: number
+  urgent: ScreenerUrgentRow[]
+  auctionTop: ScreenerAuctionRow[]
+  method: string
+}
 
 export interface Meta {
   generatedAt: string

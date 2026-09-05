@@ -12,16 +12,18 @@ import {
 import { fetchMeta } from './lib/api'
 import { track } from './lib/analytics'
 import { DEFAULT_FILTERS, resetForType } from './lib/filter'
-import type { Filters, Meta, PropertyType, SearchItem, VisibleItem } from './types'
+import type { TabId, Filters, Meta, PropertyType, SearchItem, VisibleItem } from './types'
 
 // 상세 패널은 recharts 를 끌고 오므로 초기 번들에서 분리한다 (NFR: 초기 로딩 < 3초).
 const DetailPanel = lazy(() => import('./components/DetailPanel'))
+const ScreenerPanel = lazy(() => import('./components/ScreenerPanel'))
 
-const TABS: { id: PropertyType; label: string; note?: string }[] = [
+const TABS: { id: TabId; label: string; note?: string }[] = [
   { id: 'apt', label: '아파트' },
   { id: 'commercial', label: '상가' },
   { id: 'land', label: '토지' },
   { id: 'auction', label: '경매·공매', note: '현재 온비드 공매만 제공 (법원경매 미포함)' },
+  { id: 'screener', label: '수익 스크리너', note: '스크리닝 결과이며 투자 권유가 아닙니다 — 입찰·매수 전 원출처 확인 필수' },
 ]
 
 // 전국 수집이므로 한반도 남부 전체가 보이는 시점에서 시작한다.
@@ -31,7 +33,9 @@ export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [bootError, setBootError] = useState<string | null>(null)
 
-  const [type, setType] = useState<PropertyType>('apt')
+  const [type, setType] = useState<TabId>('apt')
+  // 스크리너 탭에서는 지도 훅이 아파트 기준으로 대기한다 (화면에는 안 보임)
+  const dataType: PropertyType = type === 'screener' ? 'apt' : type
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
   const [view, setView] = useState<ViewState | null>(null)
   const [selected, setSelected] = useState<VisibleItem | null>(null)
@@ -46,9 +50,9 @@ export default function App() {
       .catch((e: Error) => setBootError(e.message))
   }, [])
 
-  const { regions: nation, error: nationError } = useNationSummary(type)
+  const { regions: nation, error: nationError } = useNationSummary(dataType)
   const { items, loading, pendingRegions, error, auctionFile } = useVisibleData(
-    type,
+    dataType,
     nation,
     view,
     filters,
@@ -88,8 +92,18 @@ export default function App() {
     track('search_select', { query: it.n })
   }, [])
 
+  // 스크리너 행 클릭 → 해당 유형 탭으로 전환하고 지도를 그 위치로 보낸다.
+  const onLocateFromScreener = useCallback((lat: number, lng: number, tab: PropertyType) => {
+    setType(tab)
+    setSelected(null)
+    setFilters((f) => resetForType(f))
+    setFlyTo({ lat, lng, zoom: 16, key: Date.now() })
+    setMobilePane('map')
+    track('screener_locate', { tab })
+  }, [])
+
   const onChangeType = useCallback(
-    (next: PropertyType) => {
+    (next: TabId) => {
       setType(next)
       setSelected(null)
       // 가격·면적 조건은 유형마다 단위와 구간이 달라 그대로 넘기면 결과가 0건이 된다.
@@ -153,7 +167,10 @@ export default function App() {
 
       <nav className="tabs" aria-label="물건 유형">
         {TABS.map((t) => {
-          const ready = meta?.types[t.id] ?? false
+          const ready =
+            t.id === 'screener'
+              ? Boolean(meta?.types.apt && meta?.types.auction)
+              : (meta?.types[t.id] ?? false)
           return (
             <button
               key={t.id}
@@ -170,7 +187,9 @@ export default function App() {
         })}
       </nav>
 
-      <FilterBar type={type} value={filters} months={meta?.months ?? []} onChange={setFilters} />
+      {type !== 'screener' && (
+        <FilterBar type={dataType} value={filters} months={meta?.months ?? []} onChange={setFilters} />
+      )}
 
       {activeTab?.note && (
         <p className="scope-note" role="note">
@@ -181,12 +200,17 @@ export default function App() {
         </p>
       )}
 
+      {type === 'screener' ? (
+        <Suspense fallback={<div className="screener"><p className="scr-loading">스크리너 불러오는 중…</p></div>}>
+          <ScreenerPanel onLocate={onLocateFromScreener} />
+        </Suspense>
+      ) : (
       <div className={`content pane-${mobilePane}`}>
         <div className="map-wrap">
           <MapView
             center={KOREA}
             zoom={7}
-            type={type}
+            type={dataType}
             regions={nation}
             items={items}
             selectedId={selected?.id ?? null}
@@ -205,7 +229,7 @@ export default function App() {
             {zoomedOut ? '전국 시군구 요약' : regionNames || '현재 영역'}
           </div>
           <ListPanel
-            type={type}
+            type={dataType}
             items={items}
             loading={loading}
             zoomedOut={zoomedOut}
@@ -221,7 +245,9 @@ export default function App() {
           </Suspense>
         )}
       </div>
+      )}
 
+      {type !== 'screener' && (
       <button
         type="button"
         className="pane-toggle"
@@ -229,6 +255,7 @@ export default function App() {
       >
         {mobilePane === 'map' ? `목록 ${items.length}` : '지도'}
       </button>
+      )}
 
       <footer className="legal">
         본 서비스의 정보는 참고용이며, 거래·입찰 전 원출처(국토교통부, 온비드, 법원) 확인이 필요합니다.

@@ -335,6 +335,13 @@ def main(argv: list[str] | None = None) -> int:
     if search_index:
         total_bytes += write_json(config.OUT_DIR / "search-index.json", {"items": search_index})
 
+    # 수익 스크리너 — 실거래(급매 신호)×공매(수익 랭킹). 디스크 전체 기준 재계산.
+    from . import screener as screener_mod
+
+    print("\n[스크리너] 급매·공매 수익 기회")
+    _, size = screener_mod.build_screener(now.date())
+    total_bytes += size
+
     print(
         f"\n완료: 유형 {len(kinds)} / 거래 {sum(deal_counts.values())} / 산출 {total_bytes/1024:.1f} KB "
         f"/ {time.time()-started:.1f}s"

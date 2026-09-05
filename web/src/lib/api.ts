@@ -1,4 +1,4 @@
-import type { AuctionFile, Meta, RegionSummary, SearchItem, TradeFile, TradeType } from '../types'
+import type { AuctionFile, Meta, RegionSummary, ScreenerFile, SearchItem, TradeFile, TradeType } from '../types'
 
 const BASE = `${import.meta.env.BASE_URL}data/`.replace(/\/{2,}/g, '/')
 
@@ -21,6 +21,7 @@ function load<T>(path: string): Promise<T> {
 export const fetchMeta = () => load<Meta>('meta.json')
 export const fetchSearchIndex = () => load<{ items: SearchItem[] }>('search-index.json')
 export const fetchAuction = () => load<AuctionFile>('auction/onbid.json')
+export const fetchScreener = () => load<ScreenerFile>('screener.json')
 
 /** 유형별 전국 시군구 요약 (줌아웃 시 집계 마커용) */
 export const fetchNationSummary = (kind: TradeType) =>
