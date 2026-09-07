@@ -43,8 +43,23 @@ export interface ScreenerAuctionRow {
   bundle: number
 }
 
+export interface DailyPick {
+  kind: PropertyType
+  kindLabel: string
+  tab: PropertyType
+  title: string
+  sub: string
+  headline: string
+  metrics: [string, string][]
+  reason: string
+  tags: string[]
+  lat: number
+  lng: number
+}
+
 export interface ScreenerFile {
   generatedAt: string
+  dailyPicks?: DailyPick[]
   urgentTotal: number
   urgentByKind: Partial<Record<TradeType, number>>
   auctionEligible: number

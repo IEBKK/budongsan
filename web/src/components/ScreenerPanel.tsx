@@ -55,6 +55,49 @@ export default function ScreenerPanel({
 
   return (
     <div className="screener">
+      {data.dailyPicks && data.dailyPicks.length > 0 && (
+        <section className="scr-section">
+          <div className="scr-head">
+            <h2>오늘의 추천 — 유형별 1건</h2>
+          </div>
+          <p className="scr-note">
+            매일 수집 직후 유형별로 가장 유력한 후보 1건씩을 뽑습니다. 최근 2주 안에 추천된
+            물건은 다시 뽑지 않아 매일 새 물건이 올라옵니다. 카드를 누르면 지도로 이동합니다.
+          </p>
+          <div className="scr-picks">
+            {data.dailyPicks.map((p) => (
+              <button
+                key={`${p.kind}-${p.title}`}
+                type="button"
+                className="pick-card"
+                onClick={() => onLocate(p.lat, p.lng, p.tab)}
+              >
+                <div className="pick-top">
+                  <span className={`pick-kind k-${p.kind}`}>{p.kindLabel}</span>
+                  <b className="pick-headline">{p.headline}</b>
+                </div>
+                <div className="pick-title">{p.title}</div>
+                <div className="pick-sub">{p.sub}</div>
+                <div className="pick-metrics">
+                  {p.metrics.map(([k, v]) => (
+                    <span key={k}>
+                      <i>{k}</i>
+                      {v}
+                    </span>
+                  ))}
+                </div>
+                <p className="pick-reason">{p.reason}</p>
+                {p.tags.length > 0 && (
+                  <div className="pick-tags">
+                    <Tags tags={p.tags} />
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="scr-stats">
         <div><b>{data.urgentTotal.toLocaleString()}</b><span>급매·이상 저가 신호</span></div>
         <div><b>{data.auctionEligible.toLocaleString()}</b><span>공매 적격 (매각·입찰가능)</span></div>

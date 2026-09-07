@@ -224,6 +224,126 @@ def _score_auction(it: dict, liq, today: date) -> dict | None:
     }
 
 
+PICKS_PATH = config.CACHE_DIR / "screener_picks.json"
+PICK_COOLDOWN_DAYS = 14  # 같은 물건을 이 기간 안에 다시 추천하지 않는다
+
+
+def _load_picks() -> dict[str, str]:
+    if PICKS_PATH.exists():
+        try:
+            return json.loads(PICKS_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _save_picks(picks: dict[str, str], today: date) -> None:
+    # 30일 지난 이력은 정리한다
+    keep = {
+        k: v
+        for k, v in picks.items()
+        if (today - date.fromisoformat(v)).days <= 30
+    }
+    PICKS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PICKS_PATH.write_text(
+        json.dumps(keep, ensure_ascii=False, sort_keys=True, indent=0), encoding="utf-8"
+    )
+
+
+def _fresh(history: dict[str, str], key: str, today: date) -> bool:
+    prev = history.get(key)
+    if prev is None:
+        return True
+    days = (today - date.fromisoformat(prev)).days
+    # 오늘 이미 뽑힌 물건은 같은 날 재실행(assemble 재시도)에서 그대로 유지한다.
+    return days == 0 or days > PICK_COOLDOWN_DAYS
+
+
+def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> list[dict]:
+    """유형별(아파트·상가·토지 급매 + 공매) 오늘의 추천 1건씩.
+
+    최근 14일 내 추천한 물건은 건너뛰어 매일 새 물건이 올라온다.
+    급매 쪽은 '직거래 의심·지분·저층' 태그가 없는 후보를 우선한다.
+    """
+    history = _load_picks()
+    picks: list[dict] = []
+
+    for kind in ("apt", "commercial", "land"):
+        pool = [u for u in urgent if u["kind"] == kind]
+        clean = [
+            u for u in pool
+            if not any(("의심" in t or "지분" in t or t == "저층") for t in u["tags"])
+        ]
+        for u in clean + pool:  # 깨끗한 후보 우선, 없으면 전체에서
+            key = f"{kind}|{u['region']}|{u['complex']}|{u['area']}"
+            if not _fresh(history, key, today):
+                continue
+            gap = u["median"] - u["amount"]
+            reason = (
+                f"같은 {'단지 ' + str(u['area']) + '㎡ 면적대' if kind == 'apt' else '물건 기준'} "
+                f"시세 {u['median']/10000:.1f}억 대비 {u['amount']/10000:.1f}억에 신고 — "
+                f"{abs(u['drop']):.0f}% 낮은 가격(차액 {gap/10000:.1f}억), 표본 {u['sampleN']}건 기준."
+            )
+            history[key] = today.isoformat()
+            picks.append({
+                "kind": kind,
+                "kindLabel": u["kindLabel"] + " 급매",
+                "tab": kind,
+                "title": u["complex"],
+                "sub": f"{u['region']} {u['umd']} · {u['area']}㎡"
+                + (f" {u['floor']}층" if u.get("floor") is not None else ""),
+                "headline": f"{u['drop']:.1f}%",
+                "metrics": [
+                    ("거래가", f"{u['amount']/10000:.2f}억"),
+                    ("시세 기준", f"{u['median']/10000:.2f}억"),
+                    ("거래일", u["dealtAt"]),
+                ],
+                "reason": reason,
+                "tags": u["tags"],
+                "lat": u["lat"],
+                "lng": u["lng"],
+            })
+            break
+
+    for s in auction_top:
+        if any("의심" in t or "문제물건" in t for t in s["tags"]):
+            continue
+        key = f"auction|{s['mgmtNo']}"
+        if not _fresh(history, key, today):
+            continue
+        parts = [f"감정가 {s['appraisal']/10000:.1f}억 물건을 최저 {s['minBid']/10000:.2f}억"
+                 f"({s['bidRate']:.0f}%)에 입찰 가능"]
+        if s["failCount"]:
+            parts.append(f"유찰 {s['failCount']}회로 체감이 검증된 할인")
+        if s["liquidity"]:
+            parts.append(f"동네 3개월 거래 {s['liquidity']}건으로 환금성 근거 있음")
+        if "수의계약" in s["status"]:
+            parts.append("수의계약 가능")
+        history[key] = today.isoformat()
+        picks.append({
+            "kind": "auction",
+            "kindLabel": "공매",
+            "tab": "auction",
+            "title": s["name"],
+            "sub": f"{s['region']} {s['umd']} · {s['category']}"
+            + (f" · 마감 {s['closeAt']}" if s["closeAt"] else ""),
+            "headline": f"{s['score']:.0f}점",
+            "metrics": [
+                ("최저입찰", f"{s['minBid']/10000:.2f}억"),
+                ("감정가", f"{s['appraisal']/10000:.2f}억"),
+                ("최저가율", f"{s['bidRate']:.0f}%"),
+            ],
+            "reason": " · ".join(parts) + ".",
+            "tags": s["tags"],
+            "lat": s["lat"],
+            "lng": s["lng"],
+        })
+        break
+
+    _save_picks(history, today)
+    return picks
+
+
 def build_screener(today: date) -> tuple[dict | None, int]:
     """screener.json 생성. (요약 dict, 파일 크기) — 입력 부족 시 (None, 0)."""
     out_dir = config.OUT_DIR
@@ -254,6 +374,7 @@ def build_screener(today: date) -> tuple[dict | None, int]:
         by_kind[r["kind"]] = by_kind.get(r["kind"], 0) + 1
     payload = {
         "generatedAt": today.isoformat(),
+        "dailyPicks": _daily_picks(urgent, auction_top, today),
         "urgentTotal": len(urgent),
         "urgentByKind": by_kind,
         "auctionEligible": len(scored),
