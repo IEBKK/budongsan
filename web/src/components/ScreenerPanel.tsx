@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { PropertyType, TradeType, ScreenerFile, ScreenerAuctionRow, ScreenerUrgentRow } from '../types'
+import type { DailyPick, PropertyType, TradeType, ScreenerFile, ScreenerAuctionRow, ScreenerUrgentRow } from '../types'
 import { fetchScreener } from '../lib/api'
 
 function eok(man: number): string {
@@ -43,6 +43,7 @@ export default function ScreenerPanel({
   const [data, setData] = useState<ScreenerFile | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [urgentKind, setUrgentKind] = useState<string>('all')
+  const [openPick, setOpenPick] = useState<DailyPick | null>(null)
 
   useEffect(() => {
     fetchScreener().then(setData).catch((e: Error) => setError(e.message))
@@ -62,7 +63,7 @@ export default function ScreenerPanel({
           </div>
           <p className="scr-note">
             매일 수집 직후 유형별로 가장 유력한 후보 1건씩을 뽑습니다. 최근 2주 안에 추천된
-            물건은 다시 뽑지 않아 매일 새 물건이 올라옵니다. 카드를 누르면 지도로 이동합니다.
+            물건은 다시 뽑지 않아 매일 새 물건이 올라옵니다. 카드를 누르면 추천 근거 분석이 열립니다.
           </p>
           <div className="scr-picks">
             {data.dailyPicks.map((p) => (
@@ -70,7 +71,7 @@ export default function ScreenerPanel({
                 key={`${p.kind}-${p.title}`}
                 type="button"
                 className="pick-card"
-                onClick={() => onLocate(p.lat, p.lng, p.tab)}
+                onClick={() => setOpenPick(p)}
               >
                 <div className="pick-top">
                   <span className={`pick-kind k-${p.kind}`}>{p.kindLabel}</span>
@@ -194,6 +195,82 @@ export default function ScreenerPanel({
           </table>
         </div>
       </section>
+
+      {openPick && (
+        <div className="pick-overlay" role="dialog" aria-modal="true" onClick={() => setOpenPick(null)}>
+          <div className="pick-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="pick-modal-head">
+              <div>
+                <span className={`pick-kind k-${openPick.kind}`}>{openPick.kindLabel}</span>
+                <h3>{openPick.title}</h3>
+                <div className="pick-sub">{openPick.sub}</div>
+              </div>
+              <button type="button" className="pick-close" onClick={() => setOpenPick(null)} aria-label="닫기">
+                ✕
+              </button>
+            </div>
+
+            {openPick.analysis ? (
+              <>
+                <p className="pick-verdict">{openPick.analysis.verdict}</p>
+
+                <h4>왜 추천됐나 — 판단 요인</h4>
+                <div className="pick-factors">
+                  {openPick.analysis.factors.map(([k, v, desc]) => (
+                    <div key={k}>
+                      <i>{k}</i>
+                      <b>{v}</b>
+                      <span>{desc}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <h4>가격 근거</h4>
+                <dl className="pick-evidence">
+                  {openPick.analysis.evidence.map(([k, v]) => (
+                    <div key={k}>
+                      <dt>{k}</dt>
+                      <dd>{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                {openPick.tags.length > 0 && (
+                  <>
+                    <h4>리스크 신호</h4>
+                    <div className="pick-tags">
+                      <Tags tags={openPick.tags} />
+                    </div>
+                  </>
+                )}
+
+                <h4>입찰·매수 전 확인</h4>
+                <ul className="pick-checklist">
+                  {openPick.analysis.checklist.map((c) => (
+                    <li key={c}>{c}</li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="pick-verdict">{openPick.reason}</p>
+            )}
+
+            <div className="pick-actions">
+              <button
+                type="button"
+                className="pick-go"
+                onClick={() => {
+                  setOpenPick(null)
+                  onLocate(openPick.lat, openPick.lng, openPick.tab)
+                }}
+              >
+                지도에서 보기
+              </button>
+              <button type="button" onClick={() => setOpenPick(null)}>닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <p className="scr-caveat">
         ⚠ 스크리닝 결과이며 투자 권유가 아닙니다. 공매는 입찰 전 온비드 원문 공고에서

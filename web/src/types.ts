@@ -43,6 +43,13 @@ export interface ScreenerAuctionRow {
   bundle: number
 }
 
+export interface PickAnalysis {
+  factors: [string, string, string][]
+  evidence: [string, string][]
+  checklist: string[]
+  verdict: string
+}
+
 export interface DailyPick {
   kind: PropertyType
   kindLabel: string
@@ -52,6 +59,7 @@ export interface DailyPick {
   headline: string
   metrics: [string, string][]
   reason: string
+  analysis?: PickAnalysis
   tags: string[]
   lat: number
   lng: number

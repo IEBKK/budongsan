@@ -338,3 +338,37 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pick-metrics i { font-style: normal; font-weight: 400; font-size: 11px; color: var(--text-dim); display: block; }
 .pick-reason { font-size: 12px; color: var(--text); margin: 4px 0 0; line-height: 1.5; }
 .pick-tags { margin-top: 2px; }
+
+/* ── 추천 근거 분석 모달 ─────────────────────────── */
+.pick-overlay {
+  position: fixed; inset: 0; z-index: 1500; background: rgba(16,19,23,.55);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.pick-modal {
+  background: var(--bg); border-radius: 12px; max-width: 560px; width: 100%;
+  max-height: 86vh; overflow-y: auto; padding: 18px 20px 16px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.3);
+}
+.pick-modal-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.pick-modal h3 { margin: 6px 0 2px; font-size: 16px; line-height: 1.35; }
+.pick-modal h4 { margin: 16px 0 6px; font-size: 12px; color: var(--text-dim); font-weight: 700; letter-spacing: .02em; }
+.pick-close { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; flex: 0 0 auto; }
+.pick-verdict {
+  margin: 12px 0 0; font-size: 13.5px; line-height: 1.6;
+  background: var(--accent-soft); border-left: 3px solid var(--accent);
+  padding: 9px 12px; border-radius: 0 6px 6px 0;
+}
+.pick-factors { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.pick-factors > div { background: var(--bg-soft); border-radius: 8px; padding: 8px 10px; }
+.pick-factors i { font-style: normal; font-size: 11px; color: var(--text-dim); display: block; }
+.pick-factors b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.pick-factors span { display: block; font-size: 11px; color: var(--text-dim); margin-top: 2px; line-height: 1.45; }
+.pick-evidence { margin: 0; }
+.pick-evidence > div { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.pick-evidence > div:last-child { border-bottom: none; }
+.pick-evidence dt { color: var(--text-dim); }
+.pick-evidence dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.pick-checklist { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.7; color: var(--text); }
+.pick-actions { display: flex; gap: 8px; margin-top: 16px; }
+.pick-actions button { flex: 0 0 auto; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font-size: 13px; }
+.pick-actions .pick-go { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }

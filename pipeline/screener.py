@@ -52,7 +52,7 @@ def _liquidity_index(out_dir):
     return liq
 
 
-def _row(kind, d, it, deal, ref_amount, drop, sample_n, note=None) -> dict:
+def _row(kind, d, it, deal, ref_amount, drop, sample_n, note=None, band=None) -> dict:
     tags = []
     if kind == "apt" and (deal.get("floor") or 99) <= 2:
         tags.append("저층")
@@ -80,6 +80,8 @@ def _row(kind, d, it, deal, ref_amount, drop, sample_n, note=None) -> dict:
         "lat": it["lat"],
         "lng": it["lng"],
         "tags": tags,
+        # 오늘의 추천 상세 분석용 근거 (면적대/물건 내 가격 분포 등)
+        "band": band or {},
     }
 
 
@@ -100,7 +102,13 @@ def _urgent_sales(out_dir) -> list[dict]:
                 if drop > prm["drop"]:
                     continue
                 key = ("apt", d["code"], it["name"], deal["area"])
-                cand = _row("apt", d, it, deal, a["medianAmount"], drop, a["count"])
+                band = {
+                    "min": a["minAmount"], "median": a["medianAmount"], "max": a["maxAmount"],
+                    "pricePerPyeong": a.get("pricePerPyeong"),
+                    "complexDeals": it.get("dealCount", 0), "lastYm": it.get("lastYm", ""),
+                    "buildYear": it.get("buildYear"),
+                }
+                cand = _row("apt", d, it, deal, a["medianAmount"], drop, a["count"], band=band)
                 if key not in rows or cand["drop"] < rows[key]["drop"]:
                     rows[key] = cand
 
@@ -133,7 +141,13 @@ def _urgent_sales(out_dir) -> list[dict]:
                         continue
                     key = (kind, d["code"], it["name"], deal["ym"], deal["day"], deal["area"])
                     ref = round(med * deal["area"])
-                    cand = _row(kind, d, it, deal, ref, drop, len(units), note)
+                    us = sorted(u for _, u in units)
+                    band = {
+                        "unitMin": round(us[0], 1), "unitMedian": round(med, 1),
+                        "unitMax": round(us[-1], 1), "unit": round(deal["amount"]/deal["area"], 1),
+                        "complexDeals": it.get("dealCount", 0), "lastYm": it.get("lastYm", ""),
+                    }
+                    cand = _row(kind, d, it, deal, ref, drop, len(units), note, band=band)
                     if key not in rows or cand["drop"] < rows[key]["drop"]:
                         rows[key] = cand
 
@@ -204,6 +218,7 @@ def _score_auction(it: dict, liq, today: date) -> dict | None:
 
     return {
         "score": round(100 * p * liquidity * r, 1),
+        "factors": {"P": round(p, 2), "L": round(liquidity, 2), "R": round(r, 2)},
         "id": it["id"],
         "name": it["name"],
         "category": mid,
@@ -223,6 +238,35 @@ def _score_auction(it: dict, liq, today: date) -> dict | None:
         "lng": it["lng"],
     }
 
+
+# 오늘의 추천 상세 — 유형별 '입찰·매수 전 확인' 체크리스트
+CHECKLISTS = {
+    "apt": [
+        "등기부등본 — 근저당·가압류·신탁 여부",
+        "직거래(중개사 미개입) 신고인지 — 특수관계 거래면 시세 신호 아님",
+        "층·향·수리 상태 현장 확인 (같은 면적대라도 조건차 큼)",
+        "현재 호가와 비교 — 신고가는 1~2개월 전 계약분",
+    ],
+    "commercial": [
+        "임차 현황 — 보증금·월세 승계 조건, 공실 여부",
+        "층별 효용 차이 — 저층·고층 단가는 원래 크게 다름",
+        "건물 용도·용도변경 제한 확인",
+        "관리비·공용부 상태, 상권 공실률",
+    ],
+    "land": [
+        "용도지역·개발행위 제한 (토지이용계획확인원)",
+        "도로 접면 여부 — 맹지면 가치 급감",
+        "지분·필지 분할 거래인지 확인",
+        "공시지가·인근 경매 낙찰가와 교차 확인",
+    ],
+    "auction": [
+        "온비드 원문 공고 — 권리관계(임차인·유치권·법정지상권)",
+        "지분 매각 여부 — 감정가는 전체 기준일 수 있음",
+        "명도 책임과 점유 현황",
+        "입찰보증금·잔금 일정, 세금 체납 인수 여부",
+        "현장 확인 — 사진과 실물 상태 차이",
+    ],
+}
 
 PICKS_PATH = config.CACHE_DIR / "screener_picks.json"
 PICK_COOLDOWN_DAYS = 14  # 같은 물건을 이 기간 안에 다시 추천하지 않는다
@@ -285,6 +329,39 @@ def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> li
                 f"{abs(u['drop']):.0f}% 낮은 가격(차액 {gap/10000:.1f}억), 표본 {u['sampleN']}건 기준."
             )
             history[key] = today.isoformat()
+            band = u.get("band", {})
+            factors = [
+                ("할인 폭", f"{abs(u['drop']):.1f}%",
+                 "같은 기준(면적대/물건) 시세 대비 낮게 신고된 정도"),
+                ("표본 신뢰도", f"{u['sampleN']}건",
+                 "비교에 쓴 최근 3개월 거래 수 — 많을수록 시세 기준이 단단함"),
+            ]
+            evidence = []
+            if kind == "apt" and band:
+                evidence = [
+                    ("면적대 최저~최고", f"{band['min']/10000:.2f}억 ~ {band['max']/10000:.2f}억"),
+                    ("면적대 중위가", f"{band['median']/10000:.2f}억"),
+                    ("이번 거래", f"{u['amount']/10000:.2f}억"
+                     + (" — 표본 중 최저가" if u['amount'] <= band['min'] else "")),
+                    ("단지 3개월 거래", f"{band.get('complexDeals', 0)}건 (최근 {band.get('lastYm','')[:4]}.{band.get('lastYm','')[4:]})"),
+                ]
+                if band.get("buildYear"):
+                    evidence.append(("건축년도", str(band["buildYear"])))
+                if band.get("pricePerPyeong"):
+                    factors.append(("면적대 평당가", f"{band['pricePerPyeong']:,.0f}만/평",
+                                    "동일 면적대 시세의 평당 환산값"))
+            elif band:
+                evidence = [
+                    ("물건 내 단가 분포", f"{band['unitMin']:,}~{band['unitMax']:,}만/㎡ (중위 {band['unitMedian']:,})"),
+                    ("이번 거래 단가", f"{band['unit']:,}만/㎡"),
+                    ("물건 3개월 거래", f"{band.get('complexDeals', 0)}건"),
+                ]
+            analysis = {
+                "factors": factors,
+                "evidence": evidence,
+                "checklist": CHECKLISTS[kind],
+                "verdict": reason,
+            }
             picks.append({
                 "kind": kind,
                 "kindLabel": u["kindLabel"] + " 급매",
@@ -299,6 +376,7 @@ def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> li
                     ("거래일", u["dealtAt"]),
                 ],
                 "reason": reason,
+                "analysis": analysis,
                 "tags": u["tags"],
                 "lat": u["lat"],
                 "lng": u["lng"],
@@ -320,6 +398,27 @@ def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> li
         if "수의계약" in s["status"]:
             parts.append("수의계약 가능")
         history[key] = today.isoformat()
+        f = s.get("factors", {}) if isinstance(s, dict) else {}
+        analysis = {
+            "factors": [
+                ("P — 할인", f"{f.get('P', 0):.2f}",
+                 "감정가 대비 최저입찰가 할인 폭 (80% 초과 할인은 상한 처리)"),
+                ("L — 유동성", f"{f.get('L', 0):.2f}",
+                 f"같은 동네·자산군 3개월 거래 {s['liquidity']}건 기반 환금성 (20건 이상 만점)"),
+                ("R — 리스크 보정", f"{f.get('R', 0):.2f}",
+                 "유찰 이력·지분 신호·자산군 환금성 가중을 곱한 값"),
+                ("종합", f"{s['score']:.1f}점", "100 × P × L × R"),
+            ],
+            "evidence": [
+                ("감정가 → 최저입찰", f"{s['appraisal']/10000:.2f}억 → {s['minBid']/10000:.2f}억 ({s['bidRate']:.0f}%)"),
+                ("유찰 이력", f"{s['failCount']}회 — 회당 약 10%p 체감과 정합"),
+                ("동네 거래(3개월)", f"{s['liquidity']}건"),
+                ("상태", s["status"] + (f" · 마감 {s['closeAt']}" if s["closeAt"] else "")),
+                ("관리번호", s["mgmtNo"]),
+            ],
+            "checklist": CHECKLISTS["auction"],
+            "verdict": " · ".join(parts) + ".",
+        }
         picks.append({
             "kind": "auction",
             "kindLabel": "공매",
@@ -334,6 +433,7 @@ def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> li
                 ("최저가율", f"{s['bidRate']:.0f}%"),
             ],
             "reason": " · ".join(parts) + ".",
+            "analysis": analysis,
             "tags": s["tags"],
             "lat": s["lat"],
             "lng": s["lng"],
