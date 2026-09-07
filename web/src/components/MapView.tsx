@@ -15,6 +15,8 @@ interface Props {
   selectedId: string | null
   hoveredId: string | null
   flyTo: { lat: number; lng: number; zoom: number; key: number } | null
+  /** 오늘의 추천에서 넘어온 강조 물건 — 전용 색 마커로 표시 */
+  highlight: { lat: number; lng: number; label: string; key: number } | null
   onViewChange: (view: ViewState) => void
   onSelect: (item: VisibleItem) => void
   onHover: (id: string | null) => void
@@ -38,7 +40,7 @@ function tooltipText(item: VisibleItem): string {
 }
 
 export default function MapView(props: Props) {
-  const { type, regions, items, selectedId, hoveredId, flyTo, onViewChange, onSelect, onHover } = props
+  const { type, regions, items, selectedId, hoveredId, flyTo, highlight, onViewChange, onSelect, onHover } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.LayerGroup | null>(null)
@@ -87,6 +89,29 @@ export default function MapView(props: Props) {
   useEffect(() => {
     if (flyTo && mapRef.current) mapRef.current.setView([flyTo.lat, flyTo.lng], flyTo.zoom)
   }, [flyTo])
+
+  // 추천 물건 강조 마커 — 일반 마커 위에 별도 색으로 얹는다.
+  const pickMarkerRef = useRef<L.Marker | null>(null)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    if (pickMarkerRef.current) {
+      pickMarkerRef.current.remove()
+      pickMarkerRef.current = null
+    }
+    if (!highlight) return
+    const m = L.marker([highlight.lat, highlight.lng], {
+      icon: L.divIcon({
+        className: 'marker-wrap',
+        html: `<div class="marker pick">★ 추천 물건</div>`,
+      }),
+      zIndexOffset: 2000,
+      interactive: true,
+    })
+    m.bindTooltip(highlight.label, { direction: 'top', offset: [0, -30] })
+    m.addTo(map)
+    pickMarkerRef.current = m
+  }, [highlight])
 
   // 마커 다시 그리기: 줌 구간에 따라 시군구 집계 / 개별 항목 클러스터를 전환한다.
   useEffect(() => {

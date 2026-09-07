@@ -38,7 +38,7 @@ const KIND_FILTERS = [
 export default function ScreenerPanel({
   onLocate,
 }: {
-  onLocate: (lat: number, lng: number, tab: PropertyType) => void
+  onLocate: (lat: number, lng: number, tab: PropertyType, label?: string) => void
 }) {
   const [data, setData] = useState<ScreenerFile | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -261,7 +261,7 @@ export default function ScreenerPanel({
                 className="pick-go"
                 onClick={() => {
                   setOpenPick(null)
-                  onLocate(openPick.lat, openPick.lng, openPick.tab)
+                  onLocate(openPick.lat, openPick.lng, openPick.tab, openPick.title)
                 }}
               >
                 지도에서 보기

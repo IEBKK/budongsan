@@ -372,3 +372,16 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pick-actions { display: flex; gap: 8px; margin-top: 16px; }
 .pick-actions button { flex: 0 0 auto; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font-size: 13px; }
 .pick-actions .pick-go { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+/* 오늘의 추천 강조 마커 — 기존 유형색(파랑/보라/초록/빨강)과 겹치지 않는 주황 */
+.marker.pick {
+  background: #ea8a00; border: 2px solid #b96c00; color: #fff; font-weight: 700;
+  box-shadow: 0 0 0 4px rgba(234,138,0,.25), 0 2px 8px rgba(0,0,0,.25);
+  animation: pick-pulse 1.6s ease-out infinite;
+}
+@keyframes pick-pulse {
+  0% { box-shadow: 0 0 0 4px rgba(234,138,0,.35), 0 2px 8px rgba(0,0,0,.25); }
+  70% { box-shadow: 0 0 0 14px rgba(234,138,0,0), 0 2px 8px rgba(0,0,0,.25); }
+  100% { box-shadow: 0 0 0 4px rgba(234,138,0,0), 0 2px 8px rgba(0,0,0,.25); }
+}
+@media (prefers-reduced-motion: reduce) { .marker.pick { animation: none; } }

@@ -42,6 +42,7 @@ export default function App() {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [pendingPick, setPendingPick] = useState<string | null>(null)
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; zoom: number; key: number } | null>(null)
+  const [highlight, setHighlight] = useState<{ lat: number; lng: number; label: string; key: number } | null>(null)
   const [mobilePane, setMobilePane] = useState<'map' | 'list'>('map')
 
   useEffect(() => {
@@ -93,19 +94,25 @@ export default function App() {
   }, [])
 
   // 스크리너 행 클릭 → 해당 유형 탭으로 전환하고 지도를 그 위치로 보낸다.
-  const onLocateFromScreener = useCallback((lat: number, lng: number, tab: PropertyType) => {
-    setType(tab)
-    setSelected(null)
-    setFilters((f) => resetForType(f))
-    setFlyTo({ lat, lng, zoom: 16, key: Date.now() })
-    setMobilePane('map')
-    track('screener_locate', { tab })
-  }, [])
+  const onLocateFromScreener = useCallback(
+    (lat: number, lng: number, tab: PropertyType, label?: string) => {
+      setType(tab)
+      setSelected(null)
+      setFilters((f) => resetForType(f))
+      setFlyTo({ lat, lng, zoom: 16, key: Date.now() })
+      // 추천 상세에서 넘어온 경우 그 물건을 전용 색 마커로 강조한다.
+      setHighlight(label ? { lat, lng, label, key: Date.now() } : null)
+      setMobilePane('map')
+      track('screener_locate', { tab })
+    },
+    [],
+  )
 
   const onChangeType = useCallback(
     (next: TabId) => {
       setType(next)
       setSelected(null)
+      setHighlight(null) // 탭을 직접 바꾸면 추천 강조 해제
       // 가격·면적 조건은 유형마다 단위와 구간이 달라 그대로 넘기면 결과가 0건이 된다.
       setFilters((f) => resetForType(f))
       track('tab_view', { tab: next })
@@ -216,6 +223,7 @@ export default function App() {
             selectedId={selected?.id ?? null}
             hoveredId={hoveredId}
             flyTo={flyTo}
+            highlight={highlight}
             onViewChange={setView}
             onSelect={onSelect}
             onHover={setHoveredId}
