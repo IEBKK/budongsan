@@ -342,6 +342,12 @@ def main(argv: list[str] | None = None) -> int:
     _, size = screener_mod.build_screener(now.date())
     total_bytes += size
 
+    # 검색 유입용 시군구 정적 페이지 + sitemap (SEO)
+    from . import seo as seo_mod
+
+    print("\n[SEO] 시군구 페이지·sitemap")
+    seo_mod.build_seo_pages(now.date())
+
     print(
         f"\n완료: 유형 {len(kinds)} / 거래 {sum(deal_counts.values())} / 산출 {total_bytes/1024:.1f} KB "
         f"/ {time.time()-started:.1f}s"

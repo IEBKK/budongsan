@@ -258,6 +258,30 @@ export default function ScreenerPanel({
             <div className="pick-actions">
               <button
                 type="button"
+                onClick={async () => {
+                  const text = [
+                    `[오늘의 ${openPick.kindLabel} 추천] ${openPick.title}`,
+                    openPick.sub,
+                    openPick.reason,
+                    '',
+                    '지도에서 보기: https://iebkk.github.io/budongsan/',
+                  ].join('\n')
+                  try {
+                    if (navigator.share) {
+                      await navigator.share({ title: openPick.title, text })
+                    } else {
+                      await navigator.clipboard.writeText(text)
+                      alert('공유 문구를 복사했습니다. 카톡·커뮤니티에 붙여넣으세요.')
+                    }
+                  } catch {
+                    /* 사용자가 공유를 취소한 경우 */
+                  }
+                }}
+              >
+                공유
+              </button>
+              <button
+                type="button"
                 className="pick-go"
                 onClick={() => {
                   setOpenPick(null)
