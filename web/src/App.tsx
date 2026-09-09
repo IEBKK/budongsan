@@ -32,7 +32,7 @@ const KOREA: [number, number] = [36.2, 127.8]
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null)
   // 운영자 접속 제외: ?owner=1 로 한 번 접속하면 그 브라우저는 방문 카운터에서 빠진다.
-  // (?owner=0 으로 해제) 배지 이미지를 아예 안 불러오는 방식이라 요청 자체가 안 나간다.
+  // (?owner=0 으로 해제) 집계 요청 자체를 안 보내는 방식.
   const [ownerMode] = useState<boolean>(() => {
     try {
       const q = new URLSearchParams(window.location.search).get('owner')
@@ -43,6 +43,29 @@ export default function App() {
       return false
     }
   })
+  // 방문 카운터 (Abacus 무가입 API) — 브라우저마다 하루 1회만 /hit 로 집계하고,
+  // 같은 날의 재방문·새로고침은 /get(조회 전용)이라 숫자가 올라가지 않는다.
+  const [visits, setVisits] = useState<{ today: number; total: number } | null>(null)
+  useEffect(() => {
+    if (import.meta.env.DEV || ownerMode) return
+    const d = new Date()
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    let counted = true // localStorage 를 못 쓰는 환경이면 집계하지 않는다 (새로고침 중복 방지 우선)
+    try {
+      counted = localStorage.getItem('bd_visit_date') === today
+      if (!counted) localStorage.setItem('bd_visit_date', today)
+    } catch {}
+    const mode = counted ? 'get' : 'hit'
+    const base = 'https://abacus.jasoncameron.dev'
+    Promise.all([
+      fetch(`${base}/${mode}/iebkk-budongsan/visits`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`${base}/${mode}/iebkk-budongsan/visits-${today}`).then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([total, day]) => {
+        if (total) setVisits({ today: day?.value ?? 0, total: total.value })
+      })
+      .catch(() => {})
+  }, [ownerMode])
   const [bootError, setBootError] = useState<string | null>(null)
 
   const [type, setType] = useState<TabId>('apt')
@@ -170,20 +193,15 @@ export default function App() {
               {meta.mock && <em className="mock-tag">모의 데이터</em>}
             </span>
           )}
-          {/* hits.sh 무가입 카운터 — 오늘/누적 페이지뷰. 프로덕션 도메인에서만 의미 있음 */}
           {ownerMode && (
             <span className="owner-tag" title="이 브라우저의 접속은 방문 수에 집계되지 않습니다. 해제: 주소에 ?owner=0">
               집계 제외 중
             </span>
           )}
-          {!import.meta.env.DEV && !ownerMode && (
-            <img
-              className="visits-badge"
-              src="https://hits.sh/iebkk.github.io/budongsan.svg?view=today-total&label=%EB%B0%A9%EB%AC%B8&color=6b7280&labelColor=374151"
-              alt="방문 수 (오늘/누적)"
-              title="방문 수 (오늘 / 누적)"
-              height={20}
-            />
+          {visits && (
+            <span className="visits-badge" title="방문 수 (오늘 / 누적) — 브라우저당 하루 1회 집계">
+              방문 {visits.today.toLocaleString()} / {visits.total.toLocaleString()}
+            </span>
           )}
         </div>
         <SearchBox onPick={onPickSearch} />
