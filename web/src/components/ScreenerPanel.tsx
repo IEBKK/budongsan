@@ -235,13 +235,68 @@ export default function ScreenerPanel({
                   ))}
                 </dl>
 
-                {openPick.tags.length > 0 && (
+                {openPick.analysis.profit && (
                   <>
-                    <h4>리스크 신호</h4>
-                    <div className="pick-tags">
-                      <Tags tags={openPick.tags} />
+                    <h4>수익 시나리오 (세전 근사)</h4>
+                    <div className="scr-tblwrap">
+                      <table className="pick-profit">
+                        <thead>
+                          <tr><th>시나리오</th><th>매도 가정</th><th>세전 차익</th><th>수익률</th></tr>
+                        </thead>
+                        <tbody>
+                          {openPick.analysis.profit.scenarios.map(([label, sell, net, roi]) => (
+                            <tr key={label}>
+                              <td>{label}</td>
+                              <td>{sell}</td>
+                              <td className={net.startsWith('−') || net.startsWith('-') ? 'neg' : 'pos'}>{net}</td>
+                              <td className={roi.startsWith('-') ? 'neg' : 'pos'}>{roi}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <dl className="pick-evidence">
+                      {openPick.analysis.profit.costs.map(([k, v]) => (
+                        <div key={k}>
+                          <dt>{k}</dt>
+                          <dd>{v}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <ul className="pick-assume">
+                      {openPick.analysis.profit.assumptions.map((a) => (
+                        <li key={a}>{a}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                {openPick.analysis.risks && openPick.analysis.risks.length > 0 ? (
+                  <>
+                    <h4>리스크 매트릭스</h4>
+                    <div className="pick-risks">
+                      {openPick.analysis.risks.map(([name, level, desc]) => (
+                        <div key={name}>
+                          <span className={`rlevel ${level === '높음' ? 'risk' : level === '중간' ? 'warn' : 'ok'}`}>
+                            {level}
+                          </span>
+                          <div>
+                            <b>{name}</b>
+                            <p>{desc}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </>
+                ) : (
+                  openPick.tags.length > 0 && (
+                    <>
+                      <h4>리스크 신호</h4>
+                      <div className="pick-tags">
+                        <Tags tags={openPick.tags} />
+                      </div>
+                    </>
+                  )
                 )}
 
                 <h4>입찰·매수 전 확인</h4>

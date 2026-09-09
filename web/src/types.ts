@@ -43,9 +43,17 @@ export interface ScreenerAuctionRow {
   bundle: number
 }
 
+export interface PickProfit {
+  scenarios: [string, string, string, string][] // 시나리오, 매도 가정, 세전 차익, 수익률
+  costs: [string, string][]
+  assumptions: string[]
+}
+
 export interface PickAnalysis {
   factors: [string, string, string][]
   evidence: [string, string][]
+  profit?: PickProfit
+  risks?: [string, string, string][] // 항목, 높음|중간|낮음, 설명
   checklist: string[]
   verdict: string
 }

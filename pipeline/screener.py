@@ -268,6 +268,184 @@ CHECKLISTS = {
     ],
 }
 
+# ── 오늘의 추천 상세 — 수익 시나리오·리스크 매트릭스 ──────────────────
+# 세제·비용 가정은 1주택 개인·전액 자기자본 기준의 근사값이다. 정확한 세액은
+# 물건·매수인 조건에 따라 달라지므로 화면에는 항상 '세전·근사' 단서를 단다.
+
+def _eok(man: float) -> str:
+    return f"{man/10000:.2f}억" if abs(man) >= 10000 else f"{man:,.0f}만"
+
+
+def _acq_pct(kind: str, price: float) -> float:
+    """취득세+지방교육세(+농특) 근사율(%). 주택은 가액 구간별, 상가·토지는 4.6% 고정."""
+    if kind == "apt":
+        if price <= 60000:
+            return 1.1
+        if price <= 90000:
+            return 2.2
+        return 3.5
+    return 4.6
+
+
+# 단기 양도세 안내 (지방소득세 별도) — 시나리오가 세전인 이유를 설명한다.
+CGT_NOTE = {
+    "apt": "양도세(주택): 1년 미만 70%·2년 미만 60% — 단기 전매 차익은 대부분 과세로 상쇄. 실거주 비과세 요건 또는 2년+ 보유 설계가 현실적.",
+    "commercial": "양도세(상가): 1년 미만 50%·2년 미만 40%, 이후 기본세율 — 세후 수익은 보유기간 설계에 좌우.",
+    "land": "양도세(토지): 1년 미만 50%·2년 미만 40% + 비사업용 토지는 기본세율+10%p 중과 — 세후 수익은 보유기간·사업용 여부에 좌우.",
+}
+
+
+def _scenario_row(label: str, sell_label: str, buy: float, sell: float, fixed_cost: float) -> list[str]:
+    """한 시나리오의 (라벨, 매도 가정, 세전 차익, 투입 대비 수익률) 행."""
+    net = sell - buy - fixed_cost - sell * 0.004  # 매도 중개보수 ~0.4%
+    invested = buy + fixed_cost
+    roi = net / invested * 100 if invested > 0 else 0
+    sign = "−" if net < 0 else "+"
+    return [label, sell_label, f"{sign}{_eok(abs(net))}", f"{roi:+.1f}%"]
+
+
+def _profit_urgent(u: dict) -> dict:
+    buy, med, kind = u["amount"], u["median"], u["kind"]
+    pct = _acq_pct(kind, buy)
+    acq = buy * pct / 100
+    broker_in = buy * 0.004
+    fixed = acq + broker_in
+    scenarios = [
+        _scenario_row("시세 회복 매도", f"시세 기준 {_eok(med)}", buy, med, fixed),
+        _scenario_row("보수적 매도 (시세 −10%)", _eok(med * 0.9), buy, med * 0.9, fixed),
+        _scenario_row("급처분 (시세 −20%)", _eok(med * 0.8), buy, med * 0.8, fixed),
+    ]
+    assumptions = [
+        "이 가격대로 매물을 확보할 수 있을 때의 시나리오 — 신고가는 1~2개월 전 계약분이라 현재 호가와 다를 수 있음.",
+        f"취득 부대비용 {pct}% + 중개보수(왕복 ~0.8%) 반영, 전액 자기자본·보유/금융비용 미포함.",
+        CGT_NOTE[kind],
+    ]
+    if (kind == "apt" and u["drop"] <= EXTREME_DROP_PCT) or (kind != "apt" and u["drop"] <= -60):
+        assumptions.insert(0, "⚠ 할인 폭이 특수거래·조건차 의심 구간 — 아래 리스크가 해소되기 전에는 시나리오 자체가 무의미함.")
+    return {
+        "scenarios": scenarios,
+        "costs": [
+            ("매입가 가정", _eok(buy)),
+            (f"취득세 등 (~{pct}%)", _eok(acq)),
+            ("매수 중개보수 (~0.4%)", _eok(broker_in)),
+        ],
+        "assumptions": assumptions,
+    }
+
+
+def _risks_urgent(u: dict, this_year: int) -> list[list[str]]:
+    kind, drop, n = u["kind"], u["drop"], u["sampleN"]
+    band = u.get("band", {})
+    risks: list[list[str]] = []
+
+    if kind == "apt":
+        if drop <= EXTREME_DROP_PCT:
+            risks.append(["시세 신호 진정성", "높음", "직거래·증여 등 특수관계 이전 의심 구간 — 등기부와 신고 유형(직거래 여부) 확인 전에는 시세 신호로 볼 수 없음."])
+        elif drop <= -25:
+            risks.append(["시세 신호 진정성", "중간", "정상 급매 범위지만 하자(수리 상태·향·소송·임차 승계) 가능성을 병행 확인해야 함."])
+        else:
+            risks.append(["시세 신호 진정성", "낮음", "통상적 급매 폭 — 다만 저층·수리 미비 등 조건차는 현장에서 확인."])
+    elif kind == "commercial":
+        risks.append(["시세 신호 진정성", "높음" if drop <= -60 else "중간",
+                      "같은 건물이라도 층·위치 효용 차이가 큰 단가 차이를 흔히 만듦 — 저층/고층·전면/후면 대비를 확인해야 진짜 할인인지 판별됨."])
+    else:
+        risks.append(["시세 신호 진정성", "높음" if drop <= -60 else "중간",
+                      "필지 조건(맹지·경사·형상·지분) 차이일 가능성 — 토지이용계획확인원과 지적도로 검증 필요."])
+
+    if n < 5:
+        risks.append(["시세 기준 신뢰도", "높음", f"비교 표본이 최근 3개월 {n}건뿐 — 시세 기준 자체가 흔들릴 수 있음."])
+    elif n < 8:
+        risks.append(["시세 기준 신뢰도", "중간", f"비교 표본 {n}건 — 기준가는 참고치로, 현재 호가와 교차 확인."])
+    else:
+        risks.append(["시세 기준 신뢰도", "낮음", f"비교 표본 {n}건으로 기준가가 비교적 단단함."])
+
+    deals = band.get("complexDeals", 0)
+    if deals < 3:
+        risks.append(["환금성", "높음", f"해당 물건 3개월 거래 {deals}건 — 되팔 때 매수자를 찾기 어려울 수 있음."])
+    elif deals < 10:
+        risks.append(["환금성", "중간", f"해당 물건 3개월 거래 {deals}건 — 급처분 시 추가 할인 각오."])
+    else:
+        risks.append(["환금성", "낮음", f"해당 물건 3개월 거래 {deals}건 — 거래가 꾸준한 편."])
+
+    if kind == "apt" and band.get("buildYear") and this_year - band["buildYear"] >= 30:
+        risks.append(["노후도", "중간", f"{band['buildYear']}년식({this_year - band['buildYear']}년차) — 수선·설비 교체 예산 필요. 재건축 기대는 지역별로 편차 큼."])
+    if u["amount"] < 5000:
+        risks.append(["절대 차익 규모", "중간", "초저가 물건 — 차익 절대액이 작아 거래비용·세금이 수익 대부분을 잠식할 수 있음."])
+    return risks
+
+
+def _profit_auction(s: dict, kind: str) -> dict:
+    buy, appr = s["minBid"], s["appraisal"]
+    pct = _acq_pct(kind, buy)
+    buffer = appr * 0.015  # 명도·수리·미납관리비 예비비 ~1.5%
+    fixed = buy * pct / 100 + buffer
+    buy2 = buy * 1.05
+    fixed2 = buy2 * pct / 100 + buffer
+    scenarios = [
+        _scenario_row("최저가 낙찰 → 감정가 90% 매도", _eok(appr * 0.9), buy, appr * 0.9, fixed),
+        _scenario_row("최저가 낙찰 → 감정가 80% 매도", _eok(appr * 0.8), buy, appr * 0.8, fixed),
+        _scenario_row("경합 +5% 낙찰 → 감정가 80% 매도", _eok(appr * 0.8), buy2, appr * 0.8, fixed2),
+    ]
+    assumptions = [
+        f"취득 부대비용 ~{pct}% + 명도·수리·미납관리비 예비비(감정가의 1.5%) 반영, 세전·전액 자기자본 기준.",
+        "공매는 대금 완납 시 소유권 취득 — 경락잔금대출 가능 여부와 잔금 일정을 입찰 전에 확인.",
+        CGT_NOTE.get(kind, CGT_NOTE["commercial"]),
+    ]
+    if s["failCount"] >= 5:
+        assumptions.insert(0, f"⚠ 감정가는 최초 공고 시점 평가액이고 유찰 {s['failCount']}회는 시장이 그 가격을 거부했다는 뜻 — 보수(80%) 시나리오 기준으로 판단 권장.")
+    return {
+        "scenarios": scenarios,
+        "costs": [
+            ("최저입찰가", _eok(buy)),
+            (f"취득세 등 (~{pct}%)", _eok(buy * pct / 100)),
+            ("명도·수리 예비비 (감정가 1.5%)", _eok(buffer)),
+        ],
+        "assumptions": assumptions,
+    }
+
+
+def _risks_auction(s: dict) -> list[list[str]]:
+    risks: list[list[str]] = []
+    if any("압류재산" in t for t in s["tags"]):
+        risks.append(["권리관계", "높음", "압류재산 — 대항력 있는 임차인·당해세·체납 인수 범위를 권리분석으로 반드시 확정해야 함."])
+    else:
+        risks.append(["권리관계", "중간", "온비드 원문 공고의 권리신고 내역(임차인·유치권·법정지상권)을 확인하기 전에는 단정 불가."])
+
+    fc = s["failCount"]
+    if fc >= 8:
+        risks.append(["유찰 이력", "높음", f"유찰 {fc}회 — 가격 문제를 넘어 물건 자체 하자(권리·명도·상태) 신호일 수 있음. 공고 원문에서 사유 추적 필수."])
+    elif fc >= 5:
+        risks.append(["유찰 이력", "중간", f"유찰 {fc}회 — 할인은 검증됐지만 왜 아무도 안 사갔는지 원문에서 확인할 것."])
+    elif fc == 0:
+        risks.append(["유찰 이력", "중간", "신건 — 아직 시장 검증 전이라 감정가 대비 할인의 적정성이 확인되지 않음."])
+    else:
+        risks.append(["유찰 이력", "낮음", f"유찰 {fc}회 — 회당 체감과 정합하는 범위."])
+
+    if CAT2KIND.get(s["category"]) == "apt":
+        risks.append(["명도", "높음", "주거용 — 점유자(임차인·전 소유자) 명도 책임은 매수인에게 있음. 명도비·소요기간(수개월)을 예산에 반영."])
+    else:
+        risks.append(["명도", "중간", "점유 현황에 따라 명도 협상·인도명령 비용 발생 가능 — 현장에서 점유자 확인."])
+
+    if any("괴리" in t for t in s["tags"]):
+        risks.append(["감정가 신뢰도", "높음", "감정가가 동네 시세와 크게 어긋남 — 감정가 기반 수익 시나리오를 그대로 믿으면 안 됨."])
+    else:
+        risks.append(["감정가 신뢰도", "중간", "감정 시점 이후 시장 변동이 반영되지 않음 — 인근 실거래가와 교차 확인."])
+
+    ln = s["liquidity"]
+    if ln >= 20:
+        risks.append(["환금성", "낮음", f"같은 동네·자산군 3개월 거래 {ln}건 — 처분 근거가 충분함."])
+    elif ln >= 8:
+        risks.append(["환금성", "중간", f"같은 동네·자산군 3개월 거래 {ln}건 — 매도 호흡을 길게 잡을 것."])
+    else:
+        risks.append(["환금성", "높음", f"같은 동네·자산군 3개월 거래 {ln}건 — 낙찰 후 장기 보유를 각오해야 함."])
+
+    if s["days"] is not None and s["days"] < 0 and "수의계약" in s["status"]:
+        risks.append(["일정", "중간", f"입찰 공고 마감({s['closeAt']}) 경과 — 현재는 수의계약 단계. 온비드에서 진행 가능 여부를 즉시 확인해야 함."])
+    elif s["days"] is not None and 0 <= s["days"] <= 3:
+        risks.append(["일정", "중간", f"마감 D-{s['days']} — 권리분석·현장 확인 시간이 촉박함."])
+    return risks
+
+
 PICKS_PATH = config.CACHE_DIR / "screener_picks.json"
 PICK_COOLDOWN_DAYS = 14  # 같은 물건을 이 기간 안에 다시 추천하지 않는다
 
@@ -359,6 +537,8 @@ def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> li
             analysis = {
                 "factors": factors,
                 "evidence": evidence,
+                "profit": _profit_urgent(u),
+                "risks": _risks_urgent(u, today.year),
                 "checklist": CHECKLISTS[kind],
                 "verdict": reason,
             }
@@ -416,6 +596,8 @@ def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> li
                 ("상태", s["status"] + (f" · 마감 {s['closeAt']}" if s["closeAt"] else "")),
                 ("관리번호", s["mgmtNo"]),
             ],
+            "profit": _profit_auction(s, CAT2KIND.get(s["category"], "commercial")),
+            "risks": _risks_auction(s),
             "checklist": CHECKLISTS["auction"],
             "verdict": " · ".join(parts) + ".",
         }
