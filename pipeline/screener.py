@@ -328,6 +328,7 @@ def _profit_urgent(u: dict) -> dict:
             ("매입가 가정", _eok(buy)),
             (f"취득세 등 (~{pct}%)", _eok(acq)),
             ("매수 중개보수 (~0.4%)", _eok(broker_in)),
+            ("총 투입 (세전)", _eok(buy + fixed)),
         ],
         "assumptions": assumptions,
     }
@@ -397,8 +398,10 @@ def _profit_auction(s: dict, kind: str) -> dict:
         "scenarios": scenarios,
         "costs": [
             ("최저입찰가", _eok(buy)),
+            ("입찰보증금 (최저가의 10%)", _eok(buy * 0.1)),
             (f"취득세 등 (~{pct}%)", _eok(buy * pct / 100)),
             ("명도·수리 예비비 (감정가 1.5%)", _eok(buffer)),
+            ("총 투입 (세전)", _eok(buy + fixed)),
         ],
         "assumptions": assumptions,
     }
@@ -446,6 +449,135 @@ def _risks_auction(s: dict) -> list[list[str]]:
     return risks
 
 
+# ── 오늘의 코칭 — 추천 중 최우선 1건을 전문가 코치 톤으로 안내 ─────────
+# 선정 기준: '높음' 리스크가 적은 순 → '중간' 리스크가 적은 순 → 검증 난이도가
+# 낮은 자산 순(아파트 > 공매 > 상가 > 토지). 할인 폭이 커도 신호를 믿기 어려운
+# 물건보다, 개인이 검증 절차만으로 접근 가능한 물건을 1픽으로 올린다.
+KIND_PRIORITY = {"apt": 0, "auction": 1, "commercial": 2, "land": 3}
+
+
+def _risk_counts(pick: dict) -> tuple[int, int]:
+    rs = pick.get("analysis", {}).get("risks", [])
+    return (sum(1 for r in rs if r[1] == "높음"), sum(1 for r in rs if r[1] == "중간"))
+
+
+def _coach_urgent(pick: dict, u: dict) -> tuple[list[dict], list[list[str]]]:
+    kind = u["kind"]
+    amount, med = _eok(u["amount"]), _eok(u["median"])
+    gap = _eok(u["median"] - u["amount"])
+    basis = f"같은 단지 {u['area']}㎡ 면적대" if kind == "apt" else "같은 물건 내 단가"
+    sc = pick["analysis"]["profit"]["scenarios"]
+    total_in = dict(pick["analysis"]["profit"]["costs"]).get("총 투입 (세전)", amount)
+    steps = [
+        {"title": "이 물건, 한 줄로", "widget": "metrics", "body": [
+            f"{u['region']} {u['umd']}의 {u['complex']}({u['area']}㎡). {basis} 시세가 {med}인데 {amount}에 신고된 거래가 포착됐습니다.",
+            f"이 갭({abs(u['drop']):.0f}%, 차액 {gap})이 진짜라면 안전마진을 안고 시작하는 셈이고, 가짜라면(특수거래·조건차) 그냥 남의 일입니다. 오늘 코칭의 목표는 이 숫자가 진짜인지 순서대로 확인하는 것입니다.",
+        ]},
+        {"title": "자금 계획부터", "widget": "funding", "body": [
+            f"이 가격대로 잡는다고 가정하면 세금·수수료까지 총 투입은 약 {total_in}입니다.",
+            "대출을 쓰더라도 '급처분 시나리오에서도 버틸 수 있는 한도'까지만 쓰세요. 급매 투자는 싸게 사는 사람이 아니라, 싸게 사서 버틸 수 있는 사람이 이깁니다.",
+        ], "point": "자기자본이 총 투입의 30%가 안 되면 이 물건은 패스하는 것이 원칙입니다. 최악 시나리오에서 버티지 못합니다."},
+        {"title": "수익 시나리오 읽는 법", "widget": "scenarios", "body": [
+            f"아래 표에서 의사결정 기준은 가운데 줄, '{sc[1][0]}'입니다 — 세전 {sc[1][2]}, 수익률 {sc[1][3]}. 시세 회복은 보너스로, 급처분은 방어선으로 읽으세요.",
+            "보수 시나리오가 본인 목표수익률(통상 연 환산 두 자릿수)을 넘지 못하면 나머지 확인 절차를 진행할 이유가 없습니다.",
+        ], "point": "세전 숫자에 취하지 마세요. 1년 내 전매면 양도세가 차익의 절반 이상을 가져갑니다 — 보유기간 계획이 곧 수익률입니다."},
+        {"title": "리스크, 이 순서로 소거", "widget": "risks", "body": [
+            "아래 등급 순서대로 하나씩 확인해 지워 나가세요. '높음'이 하나라도 해소되지 않으면 다음 단계로 넘어가지 않는 것이 원칙입니다.",
+        ]},
+        {"title": "실행 플랜", "widget": "plan", "body": [
+            "확인은 돈이 들지 않습니다. 계약금이 나가기 전까지가 코칭 구간이고, 그 전에 아래 순서를 끝내세요.",
+        ]},
+        {"title": "출구 전략과 세금", "body": [
+            CGT_NOTE[kind],
+            "매수 전에 매도 목표가와 손절선을 숫자로 적어두세요. 목표가에 도달하면 미련 없이 파는 것 — 이 전략의 전부입니다.",
+        ], "point": "출구가 그려지지 않는 물건은 아무리 싸도 사지 않습니다."},
+    ]
+    plan = [
+        ["오늘", "등기부등본 열람(근저당·가압류·신탁) + 실거래 신고 유형(직거래 여부) 확인"],
+        ["이번 주", "현장 방문 — 층·향·수리 상태 확인, 인근 중개사 2곳에서 현재 호가와 급매 사유 청취"],
+        ["협상 단계", f"확인된 하자만큼만 깎는 원칙으로 {amount} 안팎 제시 — 시세 {med} 대비 근거를 갖고 협상"],
+        ["계약 전", "잔금 일정·대출 실행 가능 여부 확정, 특약에 하자·임차 승계 조건 명시"],
+    ]
+    return steps, plan
+
+
+def _coach_auction(pick: dict, s: dict) -> tuple[list[dict], list[list[str]]]:
+    appr, min_bid = _eok(s["appraisal"]), _eok(s["minBid"])
+    sc = pick["analysis"]["profit"]["scenarios"]
+    costs = dict(pick["analysis"]["profit"]["costs"])
+    total_in = costs.get("총 투입 (세전)", min_bid)
+    deposit = costs.get("입찰보증금 (최저가의 10%)", "")
+    negotiable = "수의계약" in s["status"]
+    steps = [
+        {"title": "이 물건, 한 줄로", "widget": "metrics", "body": [
+            f"{s['region']} {s['umd']}의 공매 물건. 감정가 {appr}짜리를 최저 {min_bid}({s['bidRate']:.0f}%)부터 부를 수 있습니다.",
+            f"유찰 {s['failCount']}회 — 시장이 {s['failCount']}번 거절했다는 뜻입니다. 그 이유를 찾아내는 것이 이번 코칭의 핵심이고, 이유가 '가격'뿐이라면 기회, '권리·명도'라면 초보자는 물러설 자리입니다."
+            + (" 공고 마감은 지났지만 수의계약 단계라 아직 살 수 있습니다 — 첫 확인은 온비드 진행 여부입니다." if negotiable and (s["days"] or 0) < 0 else ""),
+        ]},
+        {"title": "자금 계획부터", "widget": "funding", "body": [
+            f"입찰보증금 {deposit}이 먼저 나가고, 낙찰되면 정해진 기한 안에 잔금을 완납해야 소유권이 넘어옵니다. 총 투입은 약 {total_in}(최저가 기준, 세전).",
+            "경락잔금대출이 되는 물건인지 입찰 '전에' 은행에 확인하세요. 잔금을 못 내면 보증금을 몰수당합니다 — 공매에서 가장 흔한 초보 사고입니다.",
+        ], "point": "잔금 조달 계획 없이 입찰장에 들어가지 않습니다. 보증금 몰수는 연습비로는 너무 비쌉니다."},
+        {"title": "수익 시나리오 읽는 법", "widget": "scenarios", "body": [
+            f"감정가는 최초 공고 시점 평가액입니다. 유찰 {s['failCount']}회면 그 가격은 이미 시장에서 거부된 값 — 판단 기준은 보수 줄('{sc[1][0]}': 세전 {sc[1][2]}, {sc[1][3]})로 잡으세요.",
+            "입찰가 상한도 여기서 나옵니다: 보수 시나리오가 목표수익률을 지키는 최대 가격까지만 쓰고, 경합이 붙어도 그 위로는 따라가지 않습니다.",
+        ], "point": "낙찰이 목표가 아니라 수익이 목표입니다. 입찰가 상한을 넘겨 이기는 순간, 진 것입니다."},
+        {"title": "리스크, 이 순서로 소거", "widget": "risks", "body": [
+            "공매는 권리분석이 절반입니다. 아래 등급 순서대로 소거하되, '높음'이 해소되지 않으면 입찰하지 않는 것이 원칙입니다.",
+        ]},
+        {"title": "실행 플랜", "widget": "plan", "body": [
+            "입찰 전까지가 코칭 구간입니다. 보증금이 나가기 전에 아래 순서를 끝내세요.",
+        ]},
+        {"title": "출구 전략과 세금", "body": [
+            CGT_NOTE.get(CAT2KIND.get(s["category"], "commercial"), CGT_NOTE["commercial"]),
+            "낙찰 후 명도까지의 기간(수개월)도 보유기간입니다. 매도 목표가와 최장 보유 한도를 미리 숫자로 적어두세요.",
+        ], "point": "출구가 그려지지 않는 물건은 아무리 싸도 입찰하지 않습니다."},
+    ]
+    plan = [
+        ["오늘", ("온비드에서 수의계약 진행 가능 여부 확인 + " if negotiable and (s["days"] or 0) < 0 else "")
+         + "원문 공고 정독 — 권리신고 내역·임차 현황·지분 여부·유의사항"],
+        ["이번 주", "현장 방문(점유자 확인) + 인근 실거래가로 감정가 검증"],
+        ["입찰 전", "명도 시나리오·예산 확정, 경락잔금대출 가능 여부 은행 확인, 보증금 준비"],
+        ["입찰가 산정", "보수 시나리오 기준 목표수익률을 지키는 최대 가격을 상한으로 — 상한 초과 경합은 포기"],
+    ]
+    return steps, plan
+
+
+def _coach(picks: list[dict], raws: dict[str, dict], today: date) -> dict | None:
+    if not picks:
+        return None
+    ranked = sorted(picks, key=lambda p: (*_risk_counts(p), KIND_PRIORITY.get(p["kind"], 9)))
+    best = ranked[0]
+    raw = raws.get(best["kind"])
+    if raw is None:
+        return None
+    hi, mid = _risk_counts(best)
+    if hi == 0:
+        why = "'높음' 등급 리스크 없이, 검증 절차만으로 접근 가능한 후보라서입니다."
+    else:
+        why = "모든 후보에 '높음' 리스크가 있지만, 이 물건의 리스크는 서류·현장 확인으로 해소 가능한 구성이라서입니다."
+    others = ", ".join(
+        f"{p['kindLabel']}(높음 {_risk_counts(p)[0]}·중간 {_risk_counts(p)[1]})" for p in ranked[1:]
+    )
+    intro = [
+        f"오늘 후보 {len(picks)}건 중 이 물건을 1픽으로 짚었습니다. {why}",
+    ]
+    if others:
+        intro.append(f"차순위 후보는 {others} — 리스크 등급 기준으로 확인 부담이 더 큽니다. 전체 후보는 수익 스크리너 탭에서 볼 수 있습니다.")
+    if best["kind"] == "auction":
+        steps, plan = _coach_auction(best, raw)
+    else:
+        steps, plan = _coach_urgent(best, raw)
+    return {
+        "pickKind": best["kind"],
+        "date": today.isoformat(),
+        "headline": f"오늘의 1픽 — {best['kindLabel']}",
+        "intro": intro,
+        "steps": steps,
+        "plan": plan,
+    }
+
+
 PICKS_PATH = config.CACHE_DIR / "screener_picks.json"
 PICK_COOLDOWN_DAYS = 14  # 같은 물건을 이 기간 안에 다시 추천하지 않는다
 
@@ -481,14 +613,16 @@ def _fresh(history: dict[str, str], key: str, today: date) -> bool:
     return days == 0 or days > PICK_COOLDOWN_DAYS
 
 
-def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> list[dict]:
-    """유형별(아파트·상가·토지 급매 + 공매) 오늘의 추천 1건씩.
+def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> tuple[list[dict], dict[str, dict]]:
+    """유형별(아파트·상가·토지 급매 + 공매) 오늘의 추천 1건씩과 원본 행.
 
     최근 14일 내 추천한 물건은 건너뛰어 매일 새 물건이 올라온다.
     급매 쪽은 '직거래 의심·지분·저층' 태그가 없는 후보를 우선한다.
+    두 번째 반환값(kind → 원본 행)은 코칭 문장 생성에 쓴다.
     """
     history = _load_picks()
     picks: list[dict] = []
+    raws: dict[str, dict] = {}
 
     for kind in ("apt", "commercial", "land"):
         pool = [u for u in urgent if u["kind"] == kind]
@@ -561,6 +695,7 @@ def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> li
                 "lat": u["lat"],
                 "lng": u["lng"],
             })
+            raws[kind] = u
             break
 
     for s in auction_top:
@@ -620,10 +755,11 @@ def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> li
             "lat": s["lat"],
             "lng": s["lng"],
         })
+        raws["auction"] = s
         break
 
     _save_picks(history, today)
-    return picks
+    return picks, raws
 
 
 def build_screener(today: date) -> tuple[dict | None, int]:
@@ -654,9 +790,11 @@ def build_screener(today: date) -> tuple[dict | None, int]:
     by_kind: dict[str, int] = {}
     for r in urgent:
         by_kind[r["kind"]] = by_kind.get(r["kind"], 0) + 1
+    picks, raws = _daily_picks(urgent, auction_top, today)
     payload = {
         "generatedAt": today.isoformat(),
-        "dailyPicks": _daily_picks(urgent, auction_top, today),
+        "dailyPicks": picks,
+        "coach": _coach(picks, raws, today),
         "urgentTotal": len(urgent),
         "urgentByKind": by_kind,
         "auctionEligible": len(scored),

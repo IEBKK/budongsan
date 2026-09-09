@@ -392,6 +392,39 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pick-actions button { flex: 0 0 auto; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font-size: 13px; }
 .pick-actions .pick-go { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 
+/* ── 오늘의 코칭 탭 ──────────────────────────────── */
+.coach { flex: 1 1 auto; overflow-y: auto; padding: 16px 20px 48px; background: var(--bg-soft); }
+.coach-inner { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.coach-hero { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.coach-hero-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.coach-date { font-size: 11px; color: var(--text-dim); }
+.coach-hero h2 { margin: 10px 0 2px; font-size: 18px; line-height: 1.35; }
+.coach-intro { margin-top: 12px; background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 10px 12px; border-radius: 0 6px 6px 0; }
+.coach-intro p { margin: 0 0 6px; font-size: 13.5px; line-height: 1.6; }
+.coach-intro p:last-child { margin-bottom: 0; }
+.coach-hero-actions { margin-top: 12px; }
+.coach-hero-actions .pick-go { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; font-weight: 600; font-size: 13px; }
+.coach-step { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px 18px; }
+.coach-step-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.coach-no { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.coach-step h3 { margin: 0; font-size: 14.5px; }
+.coach-body { margin: 6px 0; font-size: 13px; line-height: 1.65; }
+.coach-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-top: 10px; }
+.coach-metrics > div { background: var(--bg-soft); border-radius: 8px; padding: 8px 10px; }
+.coach-metrics i { font-style: normal; font-size: 11px; color: var(--text-dim); display: block; }
+.coach-metrics b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.coach-headline-num { color: var(--accent); }
+.coach-costs { margin-top: 8px; }
+.coach-costs > div.total dt, .coach-costs > div.total dd { font-weight: 700; color: var(--text); }
+.pick-profit tr.baseline td { background: var(--accent-soft); }
+.baseline-tag { margin-left: 6px; font-size: 10px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; vertical-align: 1px; white-space: nowrap; }
+.coach-plan { list-style: none; margin: 8px 0 0; padding: 0; }
+.coach-plan li { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.55; }
+.coach-plan li:last-child { border-bottom: none; }
+.coach-plan b { flex: 0 0 84px; color: var(--accent); }
+.coach-point { margin: 10px 0 0; padding: 10px 12px; background: #fdf6ec; border-left: 3px solid #ea8a00; border-radius: 0 6px 6px 0; font-size: 12.5px; line-height: 1.6; }
+.coach-point i { font-style: normal; display: block; font-size: 10.5px; font-weight: 700; color: #b96c00; letter-spacing: .04em; margin-bottom: 3px; }
+
 /* 오늘의 추천 강조 마커 — 기존 유형색(파랑/보라/초록/빨강)과 겹치지 않는 주황 */
 .marker.pick {
   background: #ea8a00; border: 2px solid #b96c00; color: #fff; font-weight: 700;

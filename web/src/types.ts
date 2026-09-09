@@ -1,7 +1,7 @@
 export type PropertyType = 'apt' | 'commercial' | 'land' | 'auction'
 export type TradeType = Exclude<PropertyType, 'auction'>
 /** 탭 = 물건 유형 + 수익 스크리너 */
-export type TabId = PropertyType | 'screener'
+export type TabId = PropertyType | 'screener' | 'coach'
 
 export interface ScreenerUrgentRow {
   kind: TradeType
@@ -73,9 +73,26 @@ export interface DailyPick {
   lng: number
 }
 
+export interface CoachStep {
+  title: string
+  body: string[]
+  point?: string
+  widget?: string // metrics | funding | scenarios | risks | plan
+}
+
+export interface Coach {
+  pickKind: PropertyType
+  date: string
+  headline: string
+  intro: string[]
+  steps: CoachStep[]
+  plan: [string, string][]
+}
+
 export interface ScreenerFile {
   generatedAt: string
   dailyPicks?: DailyPick[]
+  coach?: Coach | null
   urgentTotal: number
   urgentByKind: Partial<Record<TradeType, number>>
   auctionEligible: number

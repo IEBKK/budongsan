@@ -17,6 +17,7 @@ import type { TabId, Filters, Meta, PropertyType, SearchItem, VisibleItem } from
 // 상세 패널은 recharts 를 끌고 오므로 초기 번들에서 분리한다 (NFR: 초기 로딩 < 3초).
 const DetailPanel = lazy(() => import('./components/DetailPanel'))
 const ScreenerPanel = lazy(() => import('./components/ScreenerPanel'))
+const CoachPanel = lazy(() => import('./components/CoachPanel'))
 
 const TABS: { id: TabId; label: string; note?: string }[] = [
   { id: 'apt', label: '아파트' },
@@ -24,6 +25,7 @@ const TABS: { id: TabId; label: string; note?: string }[] = [
   { id: 'land', label: '토지' },
   { id: 'auction', label: '경매·공매', note: '현재 온비드 공매만 제공 (법원경매 미포함)' },
   { id: 'screener', label: '수익 스크리너', note: '스크리닝 결과이며 투자 권유가 아닙니다 — 입찰·매수 전 원출처 확인 필수' },
+  { id: 'coach', label: '오늘의 코칭', note: '교육용 코칭 콘텐츠이며 투자 권유가 아닙니다 — 판단과 책임은 본인에게 있습니다' },
 ]
 
 // 전국 수집이므로 한반도 남부 전체가 보이는 시점에서 시작한다.
@@ -69,8 +71,9 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null)
 
   const [type, setType] = useState<TabId>('apt')
-  // 스크리너 탭에서는 지도 훅이 아파트 기준으로 대기한다 (화면에는 안 보임)
-  const dataType: PropertyType = type === 'screener' ? 'apt' : type
+  // 스크리너·코칭 탭에서는 지도 훅이 아파트 기준으로 대기한다 (화면에는 안 보임)
+  const isPanelTab = type === 'screener' || type === 'coach'
+  const dataType: PropertyType = isPanelTab ? 'apt' : (type as PropertyType)
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
   const [view, setView] = useState<ViewState | null>(null)
   const [selected, setSelected] = useState<VisibleItem | null>(null)
@@ -210,7 +213,7 @@ export default function App() {
       <nav className="tabs" aria-label="물건 유형">
         {TABS.map((t) => {
           const ready =
-            t.id === 'screener'
+            t.id === 'screener' || t.id === 'coach'
               ? Boolean(meta?.types.apt && meta?.types.auction)
               : (meta?.types[t.id] ?? false)
           return (
@@ -229,7 +232,7 @@ export default function App() {
         })}
       </nav>
 
-      {type !== 'screener' && (
+      {!isPanelTab && (
         <FilterBar type={dataType} value={filters} months={meta?.months ?? []} onChange={setFilters} />
       )}
 
@@ -245,6 +248,10 @@ export default function App() {
       {type === 'screener' ? (
         <Suspense fallback={<div className="screener"><p className="scr-loading">스크리너 불러오는 중…</p></div>}>
           <ScreenerPanel onLocate={onLocateFromScreener} />
+        </Suspense>
+      ) : type === 'coach' ? (
+        <Suspense fallback={<div className="coach"><p className="scr-loading">오늘의 코칭 불러오는 중…</p></div>}>
+          <CoachPanel onLocate={onLocateFromScreener} />
         </Suspense>
       ) : (
       <div className={`content pane-${mobilePane}`}>
@@ -290,7 +297,7 @@ export default function App() {
       </div>
       )}
 
-      {type !== 'screener' && (
+      {!isPanelTab && (
       <button
         type="button"
         className="pane-toggle"
