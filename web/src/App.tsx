@@ -31,6 +31,18 @@ const KOREA: [number, number] = [36.2, 127.8]
 
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null)
+  // 운영자 접속 제외: ?owner=1 로 한 번 접속하면 그 브라우저는 방문 카운터에서 빠진다.
+  // (?owner=0 으로 해제) 배지 이미지를 아예 안 불러오는 방식이라 요청 자체가 안 나간다.
+  const [ownerMode] = useState<boolean>(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get('owner')
+      if (q === '1') localStorage.setItem('bd_owner', '1')
+      if (q === '0') localStorage.removeItem('bd_owner')
+      return localStorage.getItem('bd_owner') === '1'
+    } catch {
+      return false
+    }
+  })
   const [bootError, setBootError] = useState<string | null>(null)
 
   const [type, setType] = useState<TabId>('apt')
@@ -159,7 +171,12 @@ export default function App() {
             </span>
           )}
           {/* hits.sh 무가입 카운터 — 오늘/누적 페이지뷰. 프로덕션 도메인에서만 의미 있음 */}
-          {!import.meta.env.DEV && (
+          {ownerMode && (
+            <span className="owner-tag" title="이 브라우저의 접속은 방문 수에 집계되지 않습니다. 해제: 주소에 ?owner=0">
+              집계 제외 중
+            </span>
+          )}
+          {!import.meta.env.DEV && !ownerMode && (
             <img
               className="visits-badge"
               src="https://hits.sh/iebkk.github.io/budongsan.svg?view=today-total&label=%EB%B0%A9%EB%AC%B8&color=6b7280&labelColor=374151"
