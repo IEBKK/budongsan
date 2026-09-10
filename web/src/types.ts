@@ -49,9 +49,16 @@ export interface PickProfit {
   assumptions: string[]
 }
 
+export interface PickComps {
+  title: string
+  headers: string[]
+  rows: string[][] // 마지막 열이 '이번 거래'면 강조 표시
+}
+
 export interface PickAnalysis {
   factors: [string, string, string][]
   evidence: [string, string][]
+  comps?: PickComps | null
   profit?: PickProfit
   risks?: [string, string, string][] // 항목, 높음|중간|낮음, 설명
   checklist: string[]

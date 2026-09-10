@@ -102,11 +102,20 @@ def _urgent_sales(out_dir) -> list[dict]:
                 if drop > prm["drop"]:
                     continue
                 key = ("apt", d["code"], it["name"], deal["area"])
+                # 근거 제시용 — 같은 면적대 최근 실거래 (이번 거래 포함)
+                same = sorted(
+                    (dd for dd in it.get("deals", []) if str(dd["area"]) == str(deal["area"])),
+                    key=lambda x: (x["ym"], x["day"]), reverse=True,
+                )[:6]
                 band = {
                     "min": a["minAmount"], "median": a["medianAmount"], "max": a["maxAmount"],
                     "pricePerPyeong": a.get("pricePerPyeong"),
                     "complexDeals": it.get("dealCount", 0), "lastYm": it.get("lastYm", ""),
                     "buildYear": it.get("buildYear"),
+                    "comps": [
+                        [f"{dd['ym'][:4]}.{dd['ym'][4:]}.{dd['day']:02d}", dd.get("floor"), dd["amount"]]
+                        for dd in same
+                    ],
                 }
                 cand = _row("apt", d, it, deal, a["medianAmount"], drop, a["count"], band=band)
                 if key not in rows or cand["drop"] < rows[key]["drop"]:
@@ -142,10 +151,15 @@ def _urgent_sales(out_dir) -> list[dict]:
                     key = (kind, d["code"], it["name"], deal["ym"], deal["day"], deal["area"])
                     ref = round(med * deal["area"])
                     us = sorted(u for _, u in units)
+                    recent = sorted(units, key=lambda du: (du[0]["ym"], du[0]["day"]), reverse=True)[:6]
                     band = {
                         "unitMin": round(us[0], 1), "unitMedian": round(med, 1),
                         "unitMax": round(us[-1], 1), "unit": round(deal["amount"]/deal["area"], 1),
                         "complexDeals": it.get("dealCount", 0), "lastYm": it.get("lastYm", ""),
+                        "comps": [
+                            [f"{dd['ym'][:4]}.{dd['ym'][4:]}.{dd['day']:02d}", dd["area"], dd["amount"], round(un, 1)]
+                            for dd, un in recent
+                        ],
                     }
                     cand = _row(kind, d, it, deal, ref, drop, len(units), note, band=band)
                     if key not in rows or cand["drop"] < rows[key]["drop"]:
@@ -195,8 +209,10 @@ def _score_auction(it: dict, liq, today: date) -> dict | None:
     if it["minBid"] < 300:
         r *= 0.8
         tags.append("소액 — 지분·자투리 의심")
+    nbhd_median = None
     if amounts:
         med = sorted(amounts)[len(amounts) // 2]
+        nbhd_median = round(med)
         if it["appraisal"] > 0 and med > 0 and (it["appraisal"] / med > 8 or med / it["appraisal"] > 8):
             r *= 0.7
             tags.append("감정가-동네시세 괴리 큼")
@@ -232,6 +248,7 @@ def _score_auction(it: dict, liq, today: date) -> dict | None:
         "days": days,
         "status": it["status"],
         "liquidity": ln,
+        "nbhdMedian": nbhd_median,
         "tags": tags,
         "mgmtNo": it["extra"].get("mgmtNo", ""),
         "lat": it["lat"],
@@ -295,9 +312,14 @@ CGT_NOTE = {
 }
 
 
+def _net(buy: float, sell: float, fixed_cost: float) -> float:
+    """세전 차익 = 매도가 − 매입가 − 고정비용 − 매도 중개보수(~0.4%)."""
+    return sell - buy - fixed_cost - sell * 0.004
+
+
 def _scenario_row(label: str, sell_label: str, buy: float, sell: float, fixed_cost: float) -> list[str]:
     """한 시나리오의 (라벨, 매도 가정, 세전 차익, 투입 대비 수익률) 행."""
-    net = sell - buy - fixed_cost - sell * 0.004  # 매도 중개보수 ~0.4%
+    net = _net(buy, sell, fixed_cost)
     invested = buy + fixed_cost
     roi = net / invested * 100 if invested > 0 else 0
     sign = "−" if net < 0 else "+"
@@ -315,7 +337,13 @@ def _profit_urgent(u: dict) -> dict:
         _scenario_row("보수적 매도 (시세 −10%)", _eok(med * 0.9), buy, med * 0.9, fixed),
         _scenario_row("급처분 (시세 −20%)", _eok(med * 0.8), buy, med * 0.8, fixed),
     ]
+    sell_cons = med * 0.9
+    workings = (
+        f"계산 근거(보수적 매도): {_eok(sell_cons)}(매도) − {_eok(buy)}(매입) − {_eok(acq)}(취득세 {pct}%) "
+        f"− {_eok(broker_in)}(매수 중개) − {_eok(sell_cons * 0.004)}(매도 중개) = {_eok(_net(buy, sell_cons, fixed))}"
+    )
     assumptions = [
+        workings,
         "이 가격대로 매물을 확보할 수 있을 때의 시나리오 — 신고가는 1~2개월 전 계약분이라 현재 호가와 다를 수 있음.",
         f"취득 부대비용 {pct}% + 중개보수(왕복 ~0.8%) 반영, 전액 자기자본·보유/금융비용 미포함.",
         CGT_NOTE[kind],
@@ -354,19 +382,19 @@ def _risks_urgent(u: dict, this_year: int) -> list[list[str]]:
                       "필지 조건(맹지·경사·형상·지분) 차이일 가능성 — 토지이용계획확인원과 지적도로 검증 필요."])
 
     if n < 5:
-        risks.append(["시세 기준 신뢰도", "높음", f"비교 표본이 최근 3개월 {n}건뿐 — 시세 기준 자체가 흔들릴 수 있음."])
+        risks.append(["시세 기준 신뢰도", "높음", f"비교 표본이 최근 3개월 {n}건뿐 — 시세 기준 자체가 흔들릴 수 있음. (판정 기준: 5건 미만 높음 / 8건 미만 중간 / 8건 이상 낮음)"])
     elif n < 8:
-        risks.append(["시세 기준 신뢰도", "중간", f"비교 표본 {n}건 — 기준가는 참고치로, 현재 호가와 교차 확인."])
+        risks.append(["시세 기준 신뢰도", "중간", f"비교 표본 {n}건 — 기준가는 참고치로, 현재 호가와 교차 확인. (판정 기준: 5건 미만 높음 / 8건 미만 중간 / 8건 이상 낮음)"])
     else:
-        risks.append(["시세 기준 신뢰도", "낮음", f"비교 표본 {n}건으로 기준가가 비교적 단단함."])
+        risks.append(["시세 기준 신뢰도", "낮음", f"비교 표본 {n}건으로 기준가가 비교적 단단함. (판정 기준: 8건 이상 낮음)"])
 
     deals = band.get("complexDeals", 0)
     if deals < 3:
-        risks.append(["환금성", "높음", f"해당 물건 3개월 거래 {deals}건 — 되팔 때 매수자를 찾기 어려울 수 있음."])
+        risks.append(["환금성", "높음", f"해당 물건 3개월 거래 {deals}건 — 되팔 때 매수자를 찾기 어려울 수 있음. (판정 기준: 3건 미만 높음 / 10건 미만 중간 / 10건 이상 낮음)"])
     elif deals < 10:
-        risks.append(["환금성", "중간", f"해당 물건 3개월 거래 {deals}건 — 급처분 시 추가 할인 각오."])
+        risks.append(["환금성", "중간", f"해당 물건 3개월 거래 {deals}건 — 급처분 시 추가 할인 각오. (판정 기준: 3건 미만 높음 / 10건 미만 중간 / 10건 이상 낮음)"])
     else:
-        risks.append(["환금성", "낮음", f"해당 물건 3개월 거래 {deals}건 — 거래가 꾸준한 편."])
+        risks.append(["환금성", "낮음", f"해당 물건 3개월 거래 {deals}건 — 거래가 꾸준한 편. (판정 기준: 10건 이상 낮음)"])
 
     if kind == "apt" and band.get("buildYear") and this_year - band["buildYear"] >= 30:
         risks.append(["노후도", "중간", f"{band['buildYear']}년식({this_year - band['buildYear']}년차) — 수선·설비 교체 예산 필요. 재건축 기대는 지역별로 편차 큼."])
@@ -387,7 +415,13 @@ def _profit_auction(s: dict, kind: str) -> dict:
         _scenario_row("최저가 낙찰 → 감정가 80% 매도", _eok(appr * 0.8), buy, appr * 0.8, fixed),
         _scenario_row("경합 +5% 낙찰 → 감정가 80% 매도", _eok(appr * 0.8), buy2, appr * 0.8, fixed2),
     ]
+    sell_cons = appr * 0.8
+    workings = (
+        f"계산 근거(최저가→80% 매도): {_eok(sell_cons)}(매도) − {_eok(buy)}(낙찰) − {_eok(buy * pct / 100)}(취득세 {pct}%) "
+        f"− {_eok(buffer)}(명도·수리 예비비) − {_eok(sell_cons * 0.004)}(매도 중개) = {_eok(_net(buy, sell_cons, fixed))}"
+    )
     assumptions = [
+        workings,
         f"취득 부대비용 ~{pct}% + 명도·수리·미납관리비 예비비(감정가의 1.5%) 반영, 세전·전액 자기자본 기준.",
         "공매는 대금 완납 시 소유권 취득 — 경락잔금대출 가능 여부와 잔금 일정을 입찰 전에 확인.",
         CGT_NOTE.get(kind, CGT_NOTE["commercial"]),
@@ -416,13 +450,13 @@ def _risks_auction(s: dict) -> list[list[str]]:
 
     fc = s["failCount"]
     if fc >= 8:
-        risks.append(["유찰 이력", "높음", f"유찰 {fc}회 — 가격 문제를 넘어 물건 자체 하자(권리·명도·상태) 신호일 수 있음. 공고 원문에서 사유 추적 필수."])
+        risks.append(["유찰 이력", "높음", f"유찰 {fc}회 — 가격 문제를 넘어 물건 자체 하자(권리·명도·상태) 신호일 수 있음. 공고 원문에서 사유 추적 필수. (판정 기준: 8회 이상 높음 / 5회 이상·신건 중간 / 1~4회 낮음)"])
     elif fc >= 5:
-        risks.append(["유찰 이력", "중간", f"유찰 {fc}회 — 할인은 검증됐지만 왜 아무도 안 사갔는지 원문에서 확인할 것."])
+        risks.append(["유찰 이력", "중간", f"유찰 {fc}회 — 할인은 검증됐지만 왜 아무도 안 사갔는지 원문에서 확인할 것. (판정 기준: 8회 이상 높음 / 5회 이상·신건 중간 / 1~4회 낮음)"])
     elif fc == 0:
-        risks.append(["유찰 이력", "중간", "신건 — 아직 시장 검증 전이라 감정가 대비 할인의 적정성이 확인되지 않음."])
+        risks.append(["유찰 이력", "중간", "신건 — 아직 시장 검증 전이라 감정가 대비 할인의 적정성이 확인되지 않음. (판정 기준: 8회 이상 높음 / 5회 이상·신건 중간 / 1~4회 낮음)"])
     else:
-        risks.append(["유찰 이력", "낮음", f"유찰 {fc}회 — 회당 체감과 정합하는 범위."])
+        risks.append(["유찰 이력", "낮음", f"유찰 {fc}회 — 회당 체감과 정합하는 범위. (판정 기준: 1~4회 낮음)"])
 
     if CAT2KIND.get(s["category"]) == "apt":
         risks.append(["명도", "높음", "주거용 — 점유자(임차인·전 소유자) 명도 책임은 매수인에게 있음. 명도비·소요기간(수개월)을 예산에 반영."])
@@ -436,11 +470,11 @@ def _risks_auction(s: dict) -> list[list[str]]:
 
     ln = s["liquidity"]
     if ln >= 20:
-        risks.append(["환금성", "낮음", f"같은 동네·자산군 3개월 거래 {ln}건 — 처분 근거가 충분함."])
+        risks.append(["환금성", "낮음", f"같은 동네·자산군 3개월 거래 {ln}건 — 처분 근거가 충분함. (판정 기준: 20건 이상 낮음 / 8건 이상 중간 / 그 미만 높음)"])
     elif ln >= 8:
-        risks.append(["환금성", "중간", f"같은 동네·자산군 3개월 거래 {ln}건 — 매도 호흡을 길게 잡을 것."])
+        risks.append(["환금성", "중간", f"같은 동네·자산군 3개월 거래 {ln}건 — 매도 호흡을 길게 잡을 것. (판정 기준: 20건 이상 낮음 / 8건 이상 중간 / 그 미만 높음)"])
     else:
-        risks.append(["환금성", "높음", f"같은 동네·자산군 3개월 거래 {ln}건 — 낙찰 후 장기 보유를 각오해야 함."])
+        risks.append(["환금성", "높음", f"같은 동네·자산군 3개월 거래 {ln}건 — 낙찰 후 장기 보유를 각오해야 함. (판정 기준: 8건 미만 높음)"])
 
     if s["days"] is not None and s["days"] < 0 and "수의계약" in s["status"]:
         risks.append(["일정", "중간", f"입찰 공고 마감({s['closeAt']}) 경과 — 현재는 수의계약 단계. 온비드에서 진행 가능 여부를 즉시 확인해야 함."])
@@ -461,6 +495,18 @@ def _risk_counts(pick: dict) -> tuple[int, int]:
     return (sum(1 for r in rs if r[1] == "높음"), sum(1 for r in rs if r[1] == "중간"))
 
 
+def _tax_example(kind: str, net: float) -> str:
+    """단기 매도 시 세후가 얼마나 남는지 실제 숫자로 보여주는 예시 문장 (net: 보수 시나리오 세전 차익)."""
+    if net <= 0:
+        return "이 물건은 보수 시나리오에서 세전 차익이 없어 단기 매도 전략 자체가 성립하지 않습니다 — 장기 보유 관점에서만 접근하세요."
+    rate = 0.70 if kind == "apt" else 0.50
+    return (
+        f"예시로 계산해 보면: 보수 시나리오 세전 {_eok(net)}에서 1년 내 매도하면 "
+        f"단기 양도세(~{rate:.0%}) 약 {_eok(net * rate)}를 떼고 나면 손에 남는 건 {_eok(net * (1 - rate))}입니다. "
+        f"같은 차익이라도 2년 이상 보유(기본세율 6~45%)면 손에 쥐는 금액이 크게 달라집니다 — 세금이 전략을 결정합니다."
+    )
+
+
 def _coach_urgent(pick: dict, u: dict) -> tuple[list[dict], list[list[str]]]:
     kind = u["kind"]
     amount, med = _eok(u["amount"]), _eok(u["median"])
@@ -468,11 +514,32 @@ def _coach_urgent(pick: dict, u: dict) -> tuple[list[dict], list[list[str]]]:
     basis = f"같은 단지 {u['area']}㎡ 면적대" if kind == "apt" else "같은 물건 내 단가"
     sc = pick["analysis"]["profit"]["scenarios"]
     total_in = dict(pick["analysis"]["profit"]["costs"]).get("총 투입 (세전)", amount)
+
+    # 비교 실거래 예시 문장 — 이번 거래를 뺀 최근 사례를 실명 인용한다
+    band = u.get("band", {})
+    ex_rows = [c for c in band.get("comps", []) if not (c[0] == u["dealtAt"] and c[2] == u["amount"])]
+    if kind == "apt":
+        examples = ", ".join(
+            f"{c[0]} {_eok(c[2])}" + (f"({c[1]}층)" if c[1] is not None else "") for c in ex_rows[:3]
+        )
+    else:
+        examples = ", ".join(f"{c[0]} {_eok(c[2])}({c[3]:,}만/㎡)" for c in ex_rows[:3])
+    evidence_body = [
+        (f"시세로 잡은 {med} — 감이 아니라 실제 거래들입니다. 최근 사례: {examples}." if examples
+         else f"시세 기준 {med} — 최근 3개월 같은 기준 거래 {u['sampleN']}건의 중위값입니다."),
+        f"그 흐름 속에서 이번 신고가 {amount} — 아래 표에서 이번 거래가 어디에 있는지 직접 확인하세요. "
+        f"표본 {u['sampleN']}건의 최저~최고는 " + (
+            f"{_eok(band['min'])}~{_eok(band['max'])}" if kind == "apt" and band.get("min")
+            else f"단가 {band.get('unitMin', 0):,}~{band.get('unitMax', 0):,}만/㎡"
+        ) + "입니다.",
+    ]
+
     steps = [
         {"title": "이 물건, 한 줄로", "widget": "metrics", "body": [
             f"{u['region']} {u['umd']}의 {u['complex']}({u['area']}㎡). {basis} 시세가 {med}인데 {amount}에 신고된 거래가 포착됐습니다.",
             f"이 갭({abs(u['drop']):.0f}%, 차액 {gap})이 진짜라면 안전마진을 안고 시작하는 셈이고, 가짜라면(특수거래·조건차) 그냥 남의 일입니다. 오늘 코칭의 목표는 이 숫자가 진짜인지 순서대로 확인하는 것입니다.",
         ]},
+        {"title": "근거부터 — 남들이 실제로 낸 가격", "widget": "comps", "body": evidence_body},
         {"title": "자금 계획부터", "widget": "funding", "body": [
             f"이 가격대로 잡는다고 가정하면 세금·수수료까지 총 투입은 약 {total_in}입니다.",
             "대출을 쓰더라도 '급처분 시나리오에서도 버틸 수 있는 한도'까지만 쓰세요. 급매 투자는 싸게 사는 사람이 아니라, 싸게 사서 버틸 수 있는 사람이 이깁니다.",
@@ -489,6 +556,8 @@ def _coach_urgent(pick: dict, u: dict) -> tuple[list[dict], list[list[str]]]:
         ]},
         {"title": "출구 전략과 세금", "body": [
             CGT_NOTE[kind],
+            _tax_example(kind, _net(u["amount"], u["median"] * 0.9,
+                                    u["amount"] * _acq_pct(kind, u["amount"]) / 100 + u["amount"] * 0.004)),
             "매수 전에 매도 목표가와 손절선을 숫자로 적어두세요. 목표가에 도달하면 미련 없이 파는 것 — 이 전략의 전부입니다.",
         ], "point": "출구가 그려지지 않는 물건은 아무리 싸도 사지 않습니다."},
     ]
@@ -508,12 +577,35 @@ def _coach_auction(pick: dict, s: dict) -> tuple[list[dict], list[list[str]]]:
     total_in = costs.get("총 투입 (세전)", min_bid)
     deposit = costs.get("입찰보증금 (최저가의 10%)", "")
     negotiable = "수의계약" in s["status"]
+
+    # 근거 문장 — 유찰-할인 정합성(스코어러와 같은 공식)과 동네 시세를 실제 숫자로 보여준다
+    expected_rate = max(5, 100 - 10 * s["failCount"])
+    anomaly = expected_rate - s["bidRate"]
+    if anomaly >= 25:
+        consistency = (
+            f"유찰 {s['failCount']}회 기준 기대 최저가율은 약 {expected_rate}%인데 실제는 {s['bidRate']:.0f}% — "
+            f"유찰 횟수보다 훨씬 싸다는 뜻이라, 지분·특수물건 가능성을 먼저 의심해야 합니다."
+        )
+    else:
+        consistency = (
+            f"할인이 '정당하게' 벌어졌는지부터 봅니다. 회당 약 10%p 체감 공식으로 유찰 {s['failCount']}회면 "
+            f"기대 최저가율은 약 {expected_rate}% — 실제 {s['bidRate']:.0f}%로 정합 범위입니다. "
+            f"유찰 없이 값만 극단적으로 싼 '지분·특수물건' 패턴과는 다릅니다."
+        )
+    nbhd = (
+        f"환금성 근거: 같은 동네·자산군의 3개월 실거래가 {s['liquidity']}건 잡히고, 중위 거래가는 {_eok(s['nbhdMedian'])}입니다. "
+        f"물건 규모가 달라 감정가 {appr}와 직접 비교는 안 되지만, 자릿수가 크게 어긋나면 감정가 신뢰도부터 다시 봐야 합니다."
+        if s.get("nbhdMedian") else
+        f"환금성 근거: 같은 동네·자산군의 3개월 실거래 {s['liquidity']}건. 거래 근거가 얇으면 낙찰 후 처분이 길어집니다."
+    )
+
     steps = [
         {"title": "이 물건, 한 줄로", "widget": "metrics", "body": [
             f"{s['region']} {s['umd']}의 공매 물건. 감정가 {appr}짜리를 최저 {min_bid}({s['bidRate']:.0f}%)부터 부를 수 있습니다.",
             f"유찰 {s['failCount']}회 — 시장이 {s['failCount']}번 거절했다는 뜻입니다. 그 이유를 찾아내는 것이 이번 코칭의 핵심이고, 이유가 '가격'뿐이라면 기회, '권리·명도'라면 초보자는 물러설 자리입니다."
             + (" 공고 마감은 지났지만 수의계약 단계라 아직 살 수 있습니다 — 첫 확인은 온비드 진행 여부입니다." if negotiable and (s["days"] or 0) < 0 else ""),
         ]},
+        {"title": "근거부터 — 이 할인은 정당한가", "body": [consistency, nbhd]},
         {"title": "자금 계획부터", "widget": "funding", "body": [
             f"입찰보증금 {deposit}이 먼저 나가고, 낙찰되면 정해진 기한 안에 잔금을 완납해야 소유권이 넘어옵니다. 총 투입은 약 {total_in}(최저가 기준, 세전).",
             "경락잔금대출이 되는 물건인지 입찰 '전에' 은행에 확인하세요. 잔금을 못 내면 보증금을 몰수당합니다 — 공매에서 가장 흔한 초보 사고입니다.",
@@ -530,6 +622,12 @@ def _coach_auction(pick: dict, s: dict) -> tuple[list[dict], list[list[str]]]:
         ]},
         {"title": "출구 전략과 세금", "body": [
             CGT_NOTE.get(CAT2KIND.get(s["category"], "commercial"), CGT_NOTE["commercial"]),
+            _tax_example(
+                CAT2KIND.get(s["category"], "commercial"),
+                _net(s["minBid"], s["appraisal"] * 0.8,
+                     s["minBid"] * _acq_pct(CAT2KIND.get(s["category"], "commercial"), s["minBid"]) / 100
+                     + s["appraisal"] * 0.015),
+            ),
             "낙찰 후 명도까지의 기간(수개월)도 보유기간입니다. 매도 목표가와 최장 보유 한도를 미리 숫자로 적어두세요.",
         ], "point": "출구가 그려지지 않는 물건은 아무리 싸도 입찰하지 않습니다."},
     ]
@@ -668,9 +766,32 @@ def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> tu
                     ("이번 거래 단가", f"{band['unit']:,}만/㎡"),
                     ("물건 3개월 거래", f"{band.get('complexDeals', 0)}건"),
                 ]
+            comps = None
+            if band.get("comps"):
+                if kind == "apt":
+                    comps = {
+                        "title": f"같은 면적대({u['area']}㎡) 최근 실거래 — 시세 근거",
+                        "headers": ["거래일", "층", "금액", "비고"],
+                        "rows": [
+                            [c[0], f"{c[1]}층" if c[1] is not None else "—", _eok(c[2]),
+                             "이번 거래" if c[0] == u["dealtAt"] and c[2] == u["amount"] else ""]
+                            for c in band["comps"]
+                        ],
+                    }
+                else:
+                    comps = {
+                        "title": "같은 물건 최근 실거래 — 단가 근거",
+                        "headers": ["거래일", "면적(㎡)", "금액", "단가(만/㎡)", "비고"],
+                        "rows": [
+                            [c[0], f"{c[1]:g}", _eok(c[2]), f"{c[3]:,}",
+                             "이번 거래" if c[0] == u["dealtAt"] and c[2] == u["amount"] else ""]
+                            for c in band["comps"]
+                        ],
+                    }
             analysis = {
                 "factors": factors,
                 "evidence": evidence,
+                "comps": comps,
                 "profit": _profit_urgent(u),
                 "risks": _risks_urgent(u, today.year),
                 "checklist": CHECKLISTS[kind],
@@ -727,7 +848,8 @@ def _daily_picks(urgent: list[dict], auction_top: list[dict], today: date) -> tu
             "evidence": [
                 ("감정가 → 최저입찰", f"{s['appraisal']/10000:.2f}억 → {s['minBid']/10000:.2f}억 ({s['bidRate']:.0f}%)"),
                 ("유찰 이력", f"{s['failCount']}회 — 회당 약 10%p 체감과 정합"),
-                ("동네 거래(3개월)", f"{s['liquidity']}건"),
+                ("동네 거래(3개월)", f"{s['liquidity']}건"
+                 + (f" · 중위 거래가 {_eok(s['nbhdMedian'])} (참고 — 물건 규모 다름)" if s.get("nbhdMedian") else "")),
                 ("상태", s["status"] + (f" · 마감 {s['closeAt']}" if s["closeAt"] else "")),
                 ("관리번호", s["mgmtNo"]),
             ],

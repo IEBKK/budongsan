@@ -418,6 +418,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .coach-costs > div.total dt, .coach-costs > div.total dd { font-weight: 700; color: var(--text); }
 .pick-profit tr.baseline td { background: var(--accent-soft); }
 .baseline-tag { margin-left: 6px; font-size: 10px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; vertical-align: 1px; white-space: nowrap; }
+.comps-caption { caption-side: top; text-align: left; font-size: 11px; color: var(--text-dim); font-weight: 600; padding: 6px 0 4px; }
+.pick-profit.comps td { text-align: right; }
+.pick-profit.comps td:first-child { text-align: left; }
+.pick-profit tr.this-deal td { background: var(--accent-soft); font-weight: 700; }
+.this-deal-tag { font-size: 10px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
 .coach-plan { list-style: none; margin: 8px 0 0; padding: 0; }
 .coach-plan li { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.55; }
 .coach-plan li:last-child { border-bottom: none; }

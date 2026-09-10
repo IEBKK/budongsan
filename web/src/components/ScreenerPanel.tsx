@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { DailyPick, PropertyType, TradeType, ScreenerFile, ScreenerAuctionRow, ScreenerUrgentRow } from '../types'
 import { fetchScreener } from '../lib/api'
+import { CompsTable } from './CoachPanel'
 
 function eok(man: number): string {
   return man >= 10000 ? `${(man / 10000).toFixed(2)}억` : `${man.toLocaleString()}만`
@@ -234,6 +235,13 @@ export default function ScreenerPanel({
                     </div>
                   ))}
                 </dl>
+
+                {openPick.analysis.comps && (
+                  <>
+                    <h4>비교 실거래</h4>
+                    <CompsTable comps={openPick.analysis.comps} />
+                  </>
+                )}
 
                 {openPick.analysis.profit && (
                   <>

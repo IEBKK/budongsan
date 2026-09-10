@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { CoachStep, PropertyType, ScreenerFile } from '../types'
+import type { CoachStep, PickComps, PropertyType, ScreenerFile } from '../types'
 import { fetchScreener } from '../lib/api'
 
 // 오늘의 코칭 — 추천 후보 중 1픽을 부동산 코치가 옆에서 안내하듯 단계별로 보여준다.
@@ -47,6 +47,8 @@ export default function CoachPanel({
             </div>
           </div>
         )
+      case 'comps':
+        return a.comps ? <CompsTable comps={a.comps} /> : null
       case 'funding':
         return a.profit ? (
           <dl className="pick-evidence coach-costs">
@@ -188,4 +190,30 @@ export default function CoachPanel({
 
 function rank(level: string): number {
   return level === '높음' ? 0 : level === '중간' ? 1 : 2
+}
+
+export function CompsTable({ comps }: { comps: PickComps }) {
+  return (
+    <div className="scr-tblwrap">
+      <table className="pick-profit comps">
+        <caption className="comps-caption">{comps.title}</caption>
+        <thead>
+          <tr>
+            {comps.headers.map((h) => (
+              <th key={h}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {comps.rows.map((r, i) => (
+            <tr key={i} className={r[r.length - 1] === '이번 거래' ? 'this-deal' : ''}>
+              {r.map((c, j) => (
+                <td key={j}>{c === '이번 거래' ? <span className="this-deal-tag">이번 거래</span> : c}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 }
