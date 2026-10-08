@@ -24,6 +24,52 @@ interface Props {
 
 type ClusterProps = { item: VisibleItem }
 
+/** 이 줌부터 시군구 마커에 물건·거래 수를 병기한다 (그 아래 줌에서는 마커가 겹쳐 생략) */
+const REGION_COUNT_ZOOM = 10
+
+/** 이 줌 이하에서는 시군구 마커 256개가 겹쳐 뭉개지므로 시도 단위로 묶어 보여준다 */
+const SIDO_ZOOM_MAX = 8
+
+// 법정동코드 앞 2자리 → 시도 짧은 이름 (2026 행정개편: 전남광주통합특별시 12, 광주 29/전남 46 폐지)
+const SIDO_SHORT: Record<string, string> = {
+  '11': '서울', '12': '전남광주', '26': '부산', '27': '대구', '28': '인천',
+  '30': '대전', '31': '울산', '36': '세종', '41': '경기', '43': '충북',
+  '44': '충남', '47': '경북', '48': '경남', '50': '제주', '51': '강원', '52': '전북',
+}
+
+interface SidoAgg {
+  name: string
+  lat: number
+  lng: number
+  dealCount: number
+  /** 거래량 가중 평단가 (거래 없으면 null) */
+  pricePerPyeong: number | null
+}
+
+function aggregateBySido(regions: RegionSummary[]): SidoAgg[] {
+  const acc = new Map<string, { name: string; lat: number; lng: number; n: number; deal: number; priceW: number }>()
+  for (const r of regions) {
+    const k = r.code.slice(0, 2)
+    let a = acc.get(k)
+    if (!a) {
+      a = { name: SIDO_SHORT[k] ?? r.sido, lat: 0, lng: 0, n: 0, deal: 0, priceW: 0 }
+      acc.set(k, a)
+    }
+    a.lat += r.lat
+    a.lng += r.lng
+    a.n += 1
+    a.deal += r.dealCount
+    a.priceW += r.pricePerPyeong * r.dealCount
+  }
+  return [...acc.values()].map((a) => ({
+    name: a.name,
+    lat: a.lat / a.n,
+    lng: a.lng / a.n,
+    dealCount: a.deal,
+    pricePerPyeong: a.deal > 0 ? a.priceW / a.deal : null,
+  }))
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!)
 }
@@ -121,15 +167,40 @@ export default function MapView(props: Props) {
     layer.clearLayers()
     const zoom = map.getZoom()
 
+    // 넓은 시야(줌 8 이하)에서는 시도 17개만 — 시군구 256개는 겹쳐서 읽을 수 없다.
+    if (type !== 'auction' && zoom <= SIDO_ZOOM_MAX) {
+      for (const s of aggregateBySido(regions)) {
+        const marker = L.marker([s.lat, s.lng], {
+          icon: L.divIcon({
+            className: 'marker-wrap',
+            html: `<div class="marker region sido"><b>${escapeHtml(s.name)}</b><span>${
+              s.pricePerPyeong ? `${Math.round(s.pricePerPyeong).toLocaleString()}만/평` : '거래 없음'
+            }</span>${s.dealCount > 0 ? `<em class="cnt">거래 ${s.dealCount.toLocaleString()}건</em>` : ''}</div>`,
+            iconSize: [0, 0],
+          }),
+        })
+        marker.on('click', () => map.setView([s.lat, s.lng], SIDO_ZOOM_MAX + 2))
+        marker.addTo(layer)
+      }
+      return
+    }
+
     // 공매는 전국 건수가 적어 줌 단계와 무관하게 개별 물건을 그린다.
     if (type !== 'auction' && zoom <= REGION_ZOOM_MAX) {
+      // 어느 정도 확대되면 시군구 마커에 물건·거래 수를 함께 보여준다.
+      const showCounts = zoom >= REGION_COUNT_ZOOM
+      const unit = type === 'apt' ? '단지' : '물건'
       for (const r of regions) {
+        const counts =
+          showCounts && r.dealCount > 0
+            ? `<em class="cnt">${unit} ${r.complexCount.toLocaleString()} · 거래 ${r.dealCount.toLocaleString()}건</em>`
+            : ''
         const marker = L.marker([r.lat, r.lng], {
           icon: L.divIcon({
             className: 'marker-wrap',
             html: `<div class="marker region"><b>${escapeHtml(r.name)}</b><span>${
               r.pricePerPyeong ? `${Math.round(r.pricePerPyeong).toLocaleString()}만/평` : '거래 없음'
-            }</span></div>`,
+            }</span>${counts}</div>`,
             iconSize: [0, 0],
           }),
         })
