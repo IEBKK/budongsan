@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import sys
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -24,7 +25,7 @@ ENDPOINT = "https://apis.data.go.kr/B010003/OnbidRlstListSrvc2/getRlstCltrList2"
 # 부동산 공매에 등장하는 재산유형 전부. 0004(불용품)는 동산이라 제외.
 PRPT_DIV_CDS = ("0002", "0003", "0005", "0006", "0007", "0008", "0010", "0011", "0013")
 NUM_OF_ROWS = 200
-MAX_PAGES = 40
+MAX_PAGES = 100
 
 
 class OnbidError(RuntimeError):
@@ -200,4 +201,10 @@ def fetch_all(session) -> list[AuctionThing]:
                 if len(rows) < NUM_OF_ROWS:
                     break
                 time.sleep(0.2)
+            else:
+                # 상한까지 꽉 찼다 = 뒤 페이지가 잘렸을 수 있다. 조용히 넘기지 않는다.
+                print(
+                    f"  [warn] 온비드 {prpt_cd}/{pvct} 가 {MAX_PAGES}페이지 상한에 닿음 — 일부 누락 가능, MAX_PAGES 상향 필요",
+                    file=sys.stderr,
+                )
     return list(by_key.values())

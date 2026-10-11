@@ -89,7 +89,7 @@ jobs:
           ROLLING_MONTHS: '3'
         run: python -m pipeline.build --types apt,commercial,land ${{ inputs.refresh_approx && '--refresh-approx' || '' }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: data-${{ matrix.block }}
           path: |
@@ -118,7 +118,7 @@ jobs:
 
       - run: pip install -r pipeline/requirements.txt
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: data-*
           path: blocks
