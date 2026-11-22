@@ -19,7 +19,7 @@
 | 경매·공매 | 온비드(캠코) 공매 | 물건 | **법원경매 미포함** — 아래 참고 |
 
 ```
-공공 API ──(매일 06:00 KST, GitHub Actions)──▶ web/public/data/*.json ──(정적 배포)──▶ 브라우저
+공공 API ──(매일 05:17 KST, GitHub Actions)──▶ web/public/data/*.json ──(정적 배포)──▶ 브라우저
 ```
 
 ---
@@ -91,7 +91,7 @@ web/                    # React + Vite + TS, Leaflet + supercluster + Recharts
   src/components/MapView.tsx   # Leaflet 직접 제어 (클러스터링·마커)
 
 .github/workflows/
-  daily-data.yml        # cron 21:00 UTC = 06:00 KST → 수집 → 커밋 → deploy 호출
+  daily-data.yml        # cron 20:17 UTC = 05:17 KST → 수집 → 커밋 → deploy 호출
   deploy.yml            # GitHub Pages 배포 (workflow_call 로도 호출됨)
   ci.yml                # PR: 파이프라인 테스트 + 모의 빌드 + typecheck + web 빌드
 ```

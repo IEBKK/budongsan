@@ -1,4 +1,4 @@
-# DATA-01: 매일 KST 06:00 에 데이터 파이프라인을 돌리고 결과를 커밋한다.
+# DATA-01: 매일 KST 05:17 에 데이터 파이프라인을 돌리고 결과를 커밋한다.
 # 커밋이 생기면 deploy.yml 이 이어서 정적 사이트를 재배포한다.
 # DATA-04: 스케줄 워크플로 실패 시 GitHub 이 저장소 소유자에게 이메일을 보낸다.
 #
@@ -12,7 +12,7 @@ name: daily-data
 
 on:
   schedule:
-    - cron: '0 21 * * *' # 21:00 UTC = 06:00 KST
+    - cron: '17 20 * * *' # 20:17 UTC = 05:17 KST (정각은 GitHub 예약 지연이 심해 비켜 둠)
   workflow_dispatch:
     inputs:
       refresh_approx:
