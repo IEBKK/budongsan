@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 import time
+from datetime import date, timedelta
 from pathlib import Path
 
 from . import config
@@ -19,16 +20,32 @@ CACHE_PATH = config.CACHE_DIR / "geocode.json"
 APPROX_RADIUS_M = 900  # 시군구 중심 주변 분산 반경
 GEOCODE_BUDGET_SEC = 480   # 지오코딩 전체 시간 예산. 초과하면 남은 주소는 근사로 넘긴다.
 PROVIDER_TRIP_COUNT = 5    # 제공자 연속 예외 횟수 상한. 초과하면 그 제공자를 끈다.
+# 근사 좌표 점진 재조회. --refresh-approx 없이도 실행마다 이만큼만 다시 물어본다.
+# 실패한 항목은 tried 날짜를 남겨 RETRY_AFTER_DAYS 동안 건너뛴다 — 끝내 못 찾는
+# 주소가 매일 쿼터를 태우지 않게 하면서, 쌓이기만 하던 근사 좌표를 서서히 줄인다.
+APPROX_RETRY_PER_RUN = 150
+APPROX_RETRY_AFTER_DAYS = 30
 
 
 class Geocoder:
-    def __init__(self, session=None, enabled: bool = True, refresh_approx: bool = False):
+    def __init__(
+        self,
+        session=None,
+        enabled: bool = True,
+        refresh_approx: bool = False,
+        retry_budget: int = APPROX_RETRY_PER_RUN,
+        today: date | None = None,
+    ):
         self.session = session
         self.enabled = enabled
         # 키가 새로 생겼을 때, 이미 캐시된 근사 좌표를 정밀 좌표로 승격한다.
         # 기본값이 False 인 이유: 지오코더가 끝내 찾지 못하는 주소를 매일 재조회하면
         # 무료 쿼터만 태운다.
         self.refresh_approx = refresh_approx
+        self.retry_budget = retry_budget
+        self.today = today or date.today()
+        self.retried = 0
+        self.promoted = 0
         self.cache: dict[str, dict] = {}
         self.hits = 0
         self.lookups = 0
@@ -52,8 +69,11 @@ class Geocoder:
             cached is not None
             and cached.get("geo") == "approx"
             and self.enabled
-            and self.refresh_approx
+            and (self.refresh_approx or self._retry_due(cached))
         )
+        if stale_approx and not self.refresh_approx:
+            self.retry_budget -= 1
+            self.retried += 1
         if cached and not stale_approx:
             self.hits += 1
             return cached["lat"], cached["lng"], cached.get("geo", "exact")
@@ -71,11 +91,31 @@ class Geocoder:
         else:
             lat, lng = coord
             geo = "exact"
+            if stale_approx:
+                self.promoted += 1
 
         # approx 좌표도 캐시에 넣되 geo 표시를 남겨, 나중에 키가 생기면
-        # geo=="approx" 항목만 다시 조회하면 된다.
-        self.cache[key] = {"lat": round(lat, 6), "lng": round(lng, 6), "geo": geo}
+        # geo=="approx" 항목만 다시 조회하면 된다. 실제로 조회해 본 approx 는
+        # tried 날짜를 남겨 점진 재조회 주기를 판단한다.
+        entry = {"lat": round(lat, 6), "lng": round(lng, 6), "geo": geo}
+        if geo == "approx" and coord is None and self.enabled:
+            entry["tried"] = self.today.isoformat()
+        elif geo == "approx" and cached and cached.get("tried"):
+            entry["tried"] = cached["tried"]
+        self.cache[key] = entry
         return lat, lng, geo
+
+    def _retry_due(self, cached: dict) -> bool:
+        if self.retry_budget <= 0:
+            return False
+        tried = cached.get("tried")
+        if not tried:
+            return True
+        try:
+            last = date.fromisoformat(tried)
+        except ValueError:
+            return True
+        return self.today - last >= timedelta(days=APPROX_RETRY_AFTER_DAYS)
 
     def refreshable_count(self) -> int:
         return sum(1 for v in self.cache.values() if v.get("geo") == "approx")

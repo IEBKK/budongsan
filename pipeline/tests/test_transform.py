@@ -5,7 +5,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from .. import transform
+from .. import geocode, transform
 from ..config import Region, region_by_address, rolling_months
 from ..sources import molit_apt, molit_commercial, molit_land, onbid
 
@@ -138,8 +138,41 @@ def test_shared() -> None:
     check("주소->시군구 미매칭", region_by_address(REGIONS, "부산광역시 해운대구 우동"), None)
 
 
+def test_geocode_retry() -> None:
+    today = date(2026, 11, 27)
+    g = geocode.Geocoder(session=None, enabled=True, retry_budget=2, today=today)
+    g.cache = {
+        "11680|역삼동|1": {"lat": 1.0, "lng": 1.0, "geo": "approx"},                        # tried 없음 → 대상
+        "11680|역삼동|2": {"lat": 1.0, "lng": 1.0, "geo": "approx", "tried": "2026-11-20"},  # 쿨다운 중
+        "11680|역삼동|3": {"lat": 1.0, "lng": 1.0, "geo": "approx", "tried": "2026-10-01"},  # 30일 경과 → 대상
+        "11680|역삼동|4": {"lat": 1.0, "lng": 1.0, "geo": "approx"},                        # 예산 소진
+        "11680|역삼동|5": {"lat": 2.0, "lng": 2.0, "geo": "exact"},
+    }
+    asked: list[str] = []
+
+    def fake_lookup(address: str):
+        asked.append(address)
+        return (37.5, 127.0) if address.endswith(" 1") else None
+
+    g._lookup = fake_lookup
+    results = {j: g.resolve(GANGNAM, "역삼동", j) for j in "12345"}
+    check("재조회 대상만 질의", [a.rsplit(" ", 1)[1] for a in asked], ["1", "3"])
+    check("재조회 성공 → exact 승격", results["1"], (37.5, 127.0, "exact"))
+    check("쿨다운 항목은 캐시값 유지", results["2"][2], "approx")
+    check("재조회 실패 → tried 갱신", g.cache["11680|역삼동|3"].get("tried"), "2026-11-27")
+    check("예산 소진 항목은 tried 없음 유지", "tried" in g.cache["11680|역삼동|4"], False)
+    check("재조회·승격 카운트", (g.retried, g.promoted), (2, 1))
+
+    off = geocode.Geocoder(session=None, enabled=False, today=today)
+    off.cache = {"11680|역삼동|1": {"lat": 1.0, "lng": 1.0, "geo": "approx"}}
+    off._lookup = fake_lookup
+    asked.clear()
+    off.resolve(GANGNAM, "역삼동", "1")
+    check("지오코딩 비활성이면 재조회 안 함", asked, [])
+
+
 def main() -> int:
-    for fn in (test_apt, test_commercial, test_land, test_auction, test_shared):
+    for fn in (test_apt, test_commercial, test_land, test_auction, test_shared, test_geocode_retry):
         fn()
     if failures:
         print(f"FAIL ({len(failures)}건)")

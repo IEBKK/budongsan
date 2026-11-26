@@ -121,7 +121,7 @@ export interface Meta {
   failedRegions: string[]
   /** 오늘 갱신되지 못한(또는 없는) 지역 파일 수 — 권역 분할 수집의 구멍 감지용 */
   staleCount?: number
-  geocode: { cached: number; lookups: number; approximated: number; pendingExact: number }
+  geocode: { cached: number; lookups: number; approximated: number; pendingExact: number; retried?: number; promoted?: number }
   types: Record<PropertyType, boolean>
 }
 
