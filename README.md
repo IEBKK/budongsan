@@ -7,9 +7,10 @@
 **서버도 DB도 없다.** GitHub Actions 가 매일 공공 API 를 긁어 JSON 으로 굽고,
 정적 사이트가 그 JSON 만 읽는다. → 운영 비용 0원.
 
-현재 상태: **M1(파이프라인) + M2(지도 MVP) + M3(유형 확장) 완료**.
-아파트 · 상가 · 토지 실거래가와 온비드 공매를 제공한다.
-추세 대시보드(M4)와 추천 엔진(M5)은 아직이다.
+현재 상태: **전국 256개 시군구 운영 중** (https://iebkk.github.io/budongsan/).
+아파트 · 상가 · 토지 실거래가와 온비드 공매에 더해, 급매·이상 저가·공매 랭킹을 고르는
+**수익 스크리너**와 하루 1건을 단계별로 풀어 주는 **오늘의 코칭** 탭이 있다.
+추세 대시보드(M4)는 아직이다.
 
 | 탭 | 소스 | 단위 | 비고 |
 |---|---|---|---|
@@ -45,7 +46,7 @@ cd web && npm install && npm run dev
    - 국토교통부 **토지 매매 신고 조회 서비스**
    - 한국자산관리공사 **온비드 공매물건 정보** → `ONBID_SERVICE_KEY`
 
-   호출량은 API 별로 `시군구 수 × 3개월`(+페이징). 전국 269개 시군구면 API 당 하루 약 810회로
+   호출량은 API 별로 `시군구 수 × 3개월`(+페이징). 전국 256개 시군구면 API 당 하루 약 810회로
    개발계정 한도(일 1,000회/API) 안이지만 여유가 15% 남짓이다. 재시도가 잦아 한도에 걸리면
    해당 API 의 운영계정(트래픽 증량)을 신청한다. 온비드는 전국을 한 번에 받으므로 수 회면 끝난다.
 2. (선택) [VWorld](https://www.vworld.kr) 또는 [Kakao Developers](https://developers.kakao.com) 키 발급 → 정밀 좌표.
@@ -76,22 +77,27 @@ pipeline/               # 수집 → 집계 → JSON (Python 표준 라이브러
   transform.py          #   유형 공통 집계 + 공매 집계(최저가율·유찰·NEW)
   geocode.py            #   주소→좌표 (VWorld/Kakao) + 저장소 캐시 + 근사 폴백
   mock.py               #   API 키 없이 쓰는 합성 데이터 (4개 유형)
-  seed/regions.json     #   시군구 코드 + 중심좌표 (전국 269개 시군구)
+  screener.py           #   수익 스크리너·오늘의 추천·코칭 → screener.json
+  seo.py                #   시군구 정적 페이지(web/public/r/*.html) + sitemap.xml
+  seed/regions.json     #   시군구 코드 + 중심좌표 (전국 256개 시군구)
   scripts/make_regions.py #  법정동코드 전체자료(code.go.kr)로 seed 재생성
   cache/geocode.json    #   지오코딩 캐시 — 커밋 대상. 지우면 호출량이 폭증한다
   cache/auction_seen.json #  공매 물건 최초 관측일 — NEW 뱃지 판정 근거. 커밋 대상
+  cache/screener_picks.json # 오늘의 추천 이력(14일 회전). 커밋 대상
   fixtures/             #   4종 API 응답 샘플 (구/신 필드 표기 혼재)
   tests/                #   python3 -m pipeline.tests.test_transform
 
 web/                    # React + Vite + TS, Leaflet + supercluster + Recharts
   public/data/          #   파이프라인 산출물. 빌드 시 dist/data 로 그대로 복사된다
                         #   apt|commercial|land/{시군구코드}.json, auction/onbid.json,
-                        #   summary/{유형}.json, meta.json, search-index.json
+                        #   summary/{유형}.json, meta.json, search-index.json, screener.json
   src/hooks/useVisibleData.ts  # 화면 영역 → 필요한 시군구 JSON 만 lazy load
   src/components/MapView.tsx   # Leaflet 직접 제어 (클러스터링·마커)
+  src/components/ScreenerPanel.tsx, CoachPanel.tsx  # 스크리너·코칭 탭 (문장은 전부 파이프라인 생성)
 
 .github/workflows/
-  daily-data.yml        # cron 20:17 UTC = 05:17 KST → 수집 → 커밋 → deploy 호출
+  daily-data.yml        # cron 20:17 UTC = 05:17 KST → 6권역 병렬 수집 → assemble(병합·공매·요약) → 커밋 → deploy
+                        #   GitHub 예약은 수 시간 늦게 시작하는 일이 잦다 (2026-11 기준 4~8시간)
   deploy.yml            # GitHub Pages 배포 (workflow_call 로도 호출됨)
   ci.yml                # PR: 파이프라인 테스트 + 모의 빌드 + typecheck + web 빌드
 ```
@@ -122,24 +128,26 @@ Cloudflare Pages 로 옮기려면 `deploy.yml` 만 교체하고 `VITE_BASE` 를 
 
 **지오코딩 캐시가 핵심이다** — 실거래가 API 는 좌표를 주지 않는다. `pipeline/cache/geocode.json`
 을 커밋해 두기 때문에 매일 새로 등장한 주소만 조회한다. 캐시를 지우면 무료 쿼터가 하루에 소진된다.
-키가 없을 때 만들어진 근사 좌표는 `geo: "approx"` 로 표시된다. 나중에 키를 넣었다면
-`--refresh-approx` 로 한 번 돌려 그 항목만 정밀 좌표로 승격시킨다
-(남은 개수는 `meta.json` 의 `geocode.pendingExact`).
+지오코더가 못 찾은 주소의 근사 좌표는 `geo: "approx"` 로 표시된다. 매 실행마다 그중
+최대 150건을 다시 조회하고, 또 실패하면 `tried` 날짜를 남겨 30일간 건너뛴다 — 쿼터를 아끼면서
+근사 좌표가 쌓이기만 하지 않게 한다. 키를 새로 넣은 직후라면 `--refresh-approx` 로 한 번에 전부
+재조회한다 (남은 개수는 `meta.json` 의 `geocode.pendingExact`, 그날 재조회·승격 수는 `retried`·`promoted`.
+단 meta 의 geocode 수치는 assemble 잡(공매) 기준이다).
 
 **국토부 API 는 주기적으로 개편된다** — 파서가 현행 camelCase(`dealAmount`)와 구버전
 한글 태그(`거래금액`)를 모두 받는 이유다. 4종 픽스처에 두 형태가 섞여 있어
 `pipeline/tests/test_transform.py` 가 회귀를 잡는다. 3종 국토부 API 는 호출 규약이 같아
 `sources/common.py` 에 모으고, 각 소스는 '엔드포인트 + 필드 별칭 표'만 선언한다.
 
-> 필드명은 실 응답으로 한 번 검증해야 한다. 키가 없어 픽스처 기준으로만 작성했으므로,
-> 첫 실 수집 때 `meta.json` 의 `dealCountByType` 이 0 이면 별칭 표부터 확인하라.
+> 실 수집에서 `meta.json` 의 `dealCountByType` 중 하나가 갑자기 0 이 되면 API 개편을 의심하고
+> 별칭 표부터 확인하라.
 
 **공매 NEW 뱃지는 우리가 판정한다** — 온비드 응답에 '신규' 플래그가 없다. 물건키별 최초 관측일을
 `cache/auction_seen.json` 에 적어 두고 그날 처음 본 것만 NEW 로 표시한다. 종료된 물건 키는
 매 실행마다 정리해 파일이 무한히 자라지 않게 한다.
 
 **최저가율(최저입찰가 ÷ 감정가)이 공매의 핵심 지표다** — 유찰될 때마다 최저가가 깎이므로,
-이 값이 낮을수록 유찰이 누적된 물건이다. 목록·지도 정렬 기준이자 M5 추천 엔진의 P0 시그널이다.
+이 값이 낮을수록 유찰이 누적된 물건이다. 목록·지도 정렬 기준이자 수익 스크리너 공매 랭킹의 핵심 입력이다.
 
 ## 법원경매를 넣지 않은 이유
 
@@ -159,8 +167,9 @@ Cloudflare Pages 로 옮기려면 `deploy.yml` 만 교체하고 `VITE_BASE` 를 
 
 - **행정구역은 2026년 개편 기준**(전남광주통합특별시 등)이다. 개편이 또 있으면
   `python -m pipeline.scripts.make_regions` 로 seed 를 재생성한다.
-- **좌표가 근사값**이다. VWorld/Kakao 키를 넣기 전까지 마커는 구 중심에서 반경 900m 안에
-  결정적으로 흩뿌려진다. 같은 단지는 항상 같은 자리에 찍히지만 실제 위치는 아니다.
+- **일부 좌표는 근사값**이다(약 5%). 지오코더가 못 찾은 주소의 마커는 구 중심에서 반경 900m
+  안에 결정적으로 흩뿌려지고 `위치 근사` 배지가 붙는다. 같은 단지는 항상 같은 자리에 찍히지만
+  실제 위치는 아니다.
 - **매매만** 있다. 전월세는 별도 API 라 아직 붙이지 않았다.
 - **토지는 지번이 없다.** 국토부 토지 API 가 법정동까지만 주므로 '법정동 × 지목' 이 최소 단위다.
   같은 동의 서로 다른 필지가 한 마커로 합쳐진다.

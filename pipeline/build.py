@@ -317,6 +317,8 @@ def main(argv: list[str] | None = None) -> int:
             "lookups": geocoder.lookups,
             "approximated": geocoder.approximated,
             "pendingExact": geocoder.refreshable_count(),
+            "retried": geocoder.retried,
+            "promoted": geocoder.promoted,
         },
         # 프런트 탭 활성화 여부는 이 값이 결정한다.
         "types": {k: available[k] for k in ALL_TYPES},

@@ -130,7 +130,8 @@ jobs:
           from pathlib import Path
 
           geocode_path = Path('pipeline/cache/geocode.json')
-          cache = json.loads(geocode_path.read_text(encoding='utf-8')) if geocode_path.exists() else {}
+          base = json.loads(geocode_path.read_text(encoding='utf-8')) if geocode_path.exists() else {}
+          cache = dict(base)
           copied = 0
           for block in sorted(Path('blocks').glob('data-*')):
               for kind in ('apt', 'commercial', 'land'):
@@ -144,7 +145,10 @@ jobs:
                       copied += 1
               gp = block / 'pipeline/cache/geocode.json'
               if gp.exists():
-                  cache.update(json.loads(gp.read_text(encoding='utf-8')))
+                  # 권역 캐시는 체크아웃 시점 전체 캐시의 사본이다. 통째로 update 하면 뒤 권역의
+                  # 낡은 사본이 앞 권역의 갱신(근사→정밀 승격 등)을 덮어쓴다 → 바뀐 항목만 반영.
+                  blk = json.loads(gp.read_text(encoding='utf-8'))
+                  cache.update({k: v for k, v in blk.items() if base.get(k) != v})
           geocode_path.write_text(json.dumps(cache, ensure_ascii=False, sort_keys=True, indent=0), encoding='utf-8')
           print(f'지역 파일 {copied}개 병합 / 지오코딩 캐시 {len(cache)}건')
           EOF
